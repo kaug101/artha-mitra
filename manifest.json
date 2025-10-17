@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Artha-Mitra: AI Stock Valuation Expert",
+  "version": "1.0",
+  "description": "AI-driven stock analysis with DCF, market intelligence, and Gemini Nano capabilities.",
+  
+  "permissions": [
+    "storage",         
+    "activeTab",
+    "scripting",        
+    "chrome.ai"         
+  ],
+  
+  "host_permissions": [
+    "https://*.yourservice.com/",  
+    "https://*.financialdataapi.com/*" 
+  ],
+  
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "48": "icons/icon48.png"
+    },
+    "default_title": "Artha-Mitra"
+  },
+  
+  "background": {
+    "service_worker": "background.js"
+  }
+}
