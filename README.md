@@ -29,7 +29,7 @@ This extension requires a version of Chrome (e.g., Canary) that supports the `ch
 1.  **Clone the Repository:**
 
     ```bash
-    git clone https://github.com/YourUsername/artha-mitra.git
+    git clone https://github.com/kaug101/artha-mitra.git
     cd artha-mitra
     ```
 
