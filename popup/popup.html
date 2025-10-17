@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Artha-Mitra Expert</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <h1>Artha-Mitra</h1>
+    <input type="text" id="tickerInput" placeholder="Enter Ticker (e.g., AAPL)">
+    <button id="analyzeButton">Analyze Stock 📈</button>
+    
+    <div id="loading" style="display:none; color: orange;">
+        <p>Running Valuation & AI Analysis...</p>
+    </div>
+
+    <div id="results" style="display:none;">
+        <h2 id="stockHeader"></h2>
+        <p id="priceInfo"></p>
+        <p>DCF Price Targets:</p>
+        <ul id="dcfTargets"></ul>
+        
+        <button id="toggleDetails" class="prompt-button">Show Background & AI Analysis</button>
+        
+        <div id="detailsSection" style="display:none; margin-top: 10px; border-top: 1px solid #eee;">
+            <h3>AI Analysis (Powered by Gemini Nano)</h3>
+            
+            <h4>Leadership Analysis (Summarizer API)</h4>
+            <p id="leadershipSummary"></p>
+
+            <h4>Strategy & Bullish Scenario (Prompt API)</h4>
+            <pre id="strategyOutput"></pre>
+            <pre id="bullishScenario"></pre>
+            
+            <button class="prompt-button" onclick="alert('Re-check Numbers function would trigger a content script (content.js) to scrape live L2 data.')">Re-check Numbers (L2 Data)</button>
+        </div>
+    </div>
+
+    <div id="quickPrompts" style="margin-top: 15px;">
+        <button class="quick-reply-btn">Yes</button>
+        <button class="quick-reply-btn" id="noFeedback">No</button>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
