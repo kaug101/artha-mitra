@@ -1,0 +1,127 @@
+/* popup/popup.css */
+
+body {
+    width: 350px; /* Standard popup width */
+    padding: 15px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f7f9fc;
+    color: #333;
+    margin: 0;
+}
+
+h1 {
+    color: #007bff; /* Primary finance color */
+    font-size: 1.5em;
+    margin-bottom: 10px;
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 5px;
+}
+
+h2, h3, h4 {
+    color: #333;
+    margin-top: 15px;
+}
+
+#tickerInput {
+    width: calc(100% - 10px);
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+#analyzeButton {
+    width: 100%;
+    padding: 10px;
+    background-color: #28a745; /* Success/Go button */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    margin-bottom: 15px;
+    transition: background-color 0.2s;
+}
+
+#analyzeButton:hover {
+    background-color: #218838;
+}
+
+#loading {
+    padding: 10px;
+    text-align: center;
+    color: #ffc107;
+    font-style: italic;
+}
+
+/* Results Display */
+#results {
+    border: 1px solid #ddd;
+    padding: 10px;
+    border-radius: 4px;
+    background-color: #fff;
+}
+
+#dcfTargets {
+    list-style: none;
+    padding: 0;
+}
+
+#dcfTargets li {
+    padding: 5px 0;
+    border-bottom: 1px dotted #eee;
+    font-size: 0.9em;
+}
+
+.prompt-button {
+    width: 100%;
+    padding: 8px;
+    margin-top: 10px;
+    background-color: #6c757d; /* Secondary color for detail toggle */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.prompt-button:hover {
+    background-color: #5a6268;
+}
+
+#detailsSection pre {
+    background-color: #eee;
+    padding: 10px;
+    border-radius: 4px;
+    white-space: pre-wrap; /* Ensures text wraps */
+    font-size: 0.85em;
+    border-left: 3px solid #007bff;
+}
+
+/* Quick Reply Buttons */
+#quickPrompts {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+}
+
+.quick-reply-btn {
+    flex-grow: 1;
+    padding: 10px;
+    margin: 0 5px;
+    border: none;
+    border-radius: 4px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.quick-reply-btn:first-child {
+    background-color: #007bff;
+    color: white;
+}
+
+.quick-reply-btn:last-child {
+    background-color: #dc3545; /* Red for No/Feedback */
+    color: white;
+}
