@@ -29,8 +29,8 @@ This extension requires a version of Chrome (e.g., Canary) that supports the `ch
 1.  **Clone the Repository:**
 
     ```bash
-    git clone https://github.com/YourUsername/artha-mitra-ai-expert.git
-    cd artha-mitra-ai-expert
+    git clone https://github.com/YourUsername/artha-mitra.git
+    cd artha-mitra
     ```
 
 2.  **Enable Developer Mode in Chrome:**
@@ -42,7 +42,7 @@ This extension requires a version of Chrome (e.g., Canary) that supports the `ch
 3.  **Load the Extension:**
 
       * Click the **"Load unpacked"** button.
-      * Select the entire `artha-mitra-ai-expert/` folder.
+      * Select the entire `artha-mitra/` folder.
 
 4.  **Pin the Extension:**
 
@@ -64,7 +64,7 @@ The following steps cover all the key features and demonstrate the use of the re
 ## 📁 Repository Structure Overview
 
 ```
-artha-mitra-ai-expert/
+artha-mitra/
 ├── manifest.json            <- Configuration, Permissions (including "chrome.ai")
 ├── background.js            <- Service Worker: Contains all AI logic (Prompt, Summarizer), data mocks, and message handlers.
 ├── popup/
