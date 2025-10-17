@@ -1,6 +1,26 @@
 // background.js
 
-const AI_MODELS = chrome.ai;
+//const AI_MODELS = chrome.ai;
+const AI_MODELS = self.ai || chrome.ai || {
+    // Mock the prompt and summarizer APIs if AI is not available
+    prompt: {
+        prompt: async ({ prompt }) => {
+            console.warn("Gemini Nano API (self.ai/chrome.ai) is not available. Using mock response.");
+            if (prompt.includes("strategy")) {
+                return { text: "1. Mock Strategy: Buy low, sell high. 2. Mock Bullish Scenario: Everything goes up!" };
+            } else if (prompt.includes("news")) {
+                return { text: '{"why": "Mock News Reason.", "action": "Mock Investor Action."}' };
+            }
+            return { text: "Mock AI Response: AI unavailable." };
+        }
+    },
+    summarizer: {
+        summarize: async ({ text }) => {
+            console.warn("Gemini Nano API (self.ai/chrome.ai) is not available. Using mock response.");
+            return ["Mock Summary 1. (Leadership is strong)", "Mock Summary 2. (Margins are expanding)"];
+        }
+    }
+};
 
 // --- 1. CORE MESSAGE LISTENER ---
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
