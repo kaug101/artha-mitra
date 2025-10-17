@@ -4,13 +4,13 @@ body {
     width: 350px; /* Standard popup width */
     padding: 15px;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #f7f9fc;
+    background-color: #f7f9fc; /* Light background */
     color: #333;
     margin: 0;
 }
 
 h1 {
-    color: #007bff; /* Primary finance color */
+    color: #007bff; /* Primary blue for branding */
     font-size: 1.5em;
     margin-bottom: 10px;
     border-bottom: 2px solid #007bff;
@@ -34,7 +34,7 @@ h2, h3, h4 {
 #analyzeButton {
     width: 100%;
     padding: 10px;
-    background-color: #28a745; /* Success/Go button */
+    background-color: #28a745; /* Green: Success/Action */
     color: white;
     border: none;
     border-radius: 4px;
@@ -51,7 +51,7 @@ h2, h3, h4 {
 #loading {
     padding: 10px;
     text-align: center;
-    color: #ffc107;
+    color: #ffc107; /* Orange/Yellow for attention */
     font-style: italic;
 }
 
@@ -61,6 +61,7 @@ h2, h3, h4 {
     padding: 10px;
     border-radius: 4px;
     background-color: #fff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
 #dcfTargets {
@@ -73,12 +74,16 @@ h2, h3, h4 {
     border-bottom: 1px dotted #eee;
     font-size: 0.9em;
 }
+/* Ensure the last item doesn't have a border */
+#dcfTargets li:last-child {
+    border-bottom: none; 
+}
 
 .prompt-button {
     width: 100%;
     padding: 8px;
     margin-top: 10px;
-    background-color: #6c757d; /* Secondary color for detail toggle */
+    background-color: #6c757d; /* Grey/Secondary color for detail toggle */
     color: white;
     border: none;
     border-radius: 4px;
@@ -90,13 +95,21 @@ h2, h3, h4 {
     background-color: #5a6268;
 }
 
+/* AI Analysis Section Styling */
+#detailsSection {
+    margin-top: 10px; 
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+}
+
 #detailsSection pre {
     background-color: #eee;
     padding: 10px;
     border-radius: 4px;
     white-space: pre-wrap; /* Ensures text wraps */
     font-size: 0.85em;
-    border-left: 3px solid #007bff;
+    border-left: 3px solid #007bff; /* Highlights AI-generated text */
+    margin-top: 5px;
 }
 
 /* Quick Reply Buttons */
@@ -104,6 +117,8 @@ h2, h3, h4 {
     display: flex;
     justify-content: space-between;
     margin-top: 20px;
+    padding-top: 10px;
+    border-top: 1px solid #ddd;
 }
 
 .quick-reply-btn {
@@ -114,10 +129,15 @@ h2, h3, h4 {
     border-radius: 4px;
     font-weight: bold;
     cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.quick-reply-btn:hover {
+    opacity: 0.8;
 }
 
 .quick-reply-btn:first-child {
-    background-color: #007bff;
+    background-color: #007bff; /* Yes/Confirm */
     color: white;
 }
 
