@@ -1,26 +1,29 @@
 // background.js
 
 //const AI_MODELS = chrome.ai;
-const AI_MODELS = self.ai || chrome.ai || {
-    // Mock the prompt and summarizer APIs if AI is not available
-    prompt: {
+const AI_MODELS = self.ai || chrome.ai || {}; 
+const LanguageModel = AI_MODELS.LanguageModel || self.LanguageModel; 
+
+// Mock implementation for resilience (in case LanguageModel is undefined)
+if (!LanguageModel) {
+    console.error("CRITICAL: LanguageModel API is NOT available. Using mock mode.");
+    // Re-create mock objects if the real API is missing
+    AI_MODELS.prompt = {
         prompt: async ({ prompt }) => {
-            console.warn("Gemini Nano API (self.ai/chrome.ai) is not available. Using mock response.");
+            console.warn("MOCK: AI_MODELS.prompt used.");
             if (prompt.includes("strategy")) {
                 return { text: "1. Mock Strategy: Buy low, sell high. 2. Mock Bullish Scenario: Everything goes up!" };
-            } else if (prompt.includes("news")) {
-                return { text: '{"why": "Mock News Reason.", "action": "Mock Investor Action."}' };
             }
-            return { text: "Mock AI Response: AI unavailable." };
+            return { text: '{"why": "Mock News Reason.", "action": "Mock Investor Action."}' };
         }
-    },
-    summarizer: {
+    };
+    AI_MODELS.summarizer = {
         summarize: async ({ text }) => {
-            console.warn("Gemini Nano API (self.ai/chrome.ai) is not available. Using mock response.");
-            return ["Mock Summary 1. (Leadership is strong)", "Mock Summary 2. (Margins are expanding)"];
+            console.warn("MOCK: AI_MODELS.summarizer used.");
+            return { output: "Mock Summary: Check console for error details." };
         }
-    }
-};
+    };
+}
 
 // --- 1. CORE MESSAGE LISTENER ---
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -72,62 +75,70 @@ async function handleValuation(ticker) {
 // --- 3. CHROME AI API INTEGRATION ---
 
 /**
- * Uses Summarizer and Rewriter APIs for in-depth analysis.
+ * Uses Summarizer and Prompt APIs for in-depth analysis.
  */
 async function getAIAnalysis(leadershipText, stockType, macroTrend) {
-    
-    let leadershipSummary = "Analysis not available.";
-    let bullishScenario = "Scenario not available.";
+    let statusMessage = "AI Inference Failed.";
 
-    // --- A. Summarizer API: Leadership Analysis ---
-    if (AI_MODELS.summarizer) {
-        try {
-            leadershipSummary = await AI_MODELS.summarizer.summarize({
-                text: leadershipText,
-                format: "bullets", // Requesting bullet-point format
-                maxSentences: 3
-            });
-        } catch (e) {
-            console.error("Summarizer API failed:", e);
-            leadershipSummary = `[Error] Failed to summarize leadership statements. Raw text: ${leadershipText.substring(0, 50)}...`;
+    try {
+        if (!LanguageModel) {
+            // Fallback to mock logic if LanguageModel isn't present
+            throw new Error("LanguageModel API not found. Running in mock mode.");
         }
-    }
 
-    // --- B. Prompt API (or Rewriter API): Strategy Recommendation & Bullish Scenario ---
-    // Using Prompt API for more structured, creative output.
-    if (AI_MODELS.prompt) {
-        try {
-            const prompt = `Based on the following: 
-                Stock Type: ${stockType}
-                Macro Trend: ${macroTrend}
-                
-                1. Generate a 3-point trading strategy (Timing, Risk, Allocation).
-                2. Write a 2-paragraph highly BULLISH investment scenario for the next 12 months.
-                Format the response as clear, readable text blocks.`;
+        const availability = await LanguageModel.availability();
+        console.log(`[Gemini Nano Status] Availability: ${availability}`);
 
-            const aiResponse = await AI_MODELS.prompt.prompt({
-                prompt: prompt,
-                // Using a slightly higher temperature for more creative scenario writing
-                temperature: 0.8 
-            });
-
-            // Parse response (simple split for demo)
-            const parts = aiResponse.text.split('2. Write a 2-paragraph highly BULLISH investment scenario');
-            
-            return {
-                strategy: parts[0].trim(),
-                bullishScenario: '2. ' + parts[1].trim(), // Re-add the section header
-                leadershipSummary: leadershipSummary
-            };
-
-        } catch (e) {
-            console.error("Prompt API failed:", e);
-            return {
-                strategy: "[Error] Failed to generate strategy via Prompt API.",
-                bullishScenario: "[Error] Failed to generate bullish scenario via Prompt API.",
-                leadershipSummary: leadershipSummary
-            };
+        if (availability === 'unavailable') {
+            statusMessage = "Gemini Nano is unavailable (hardware/space/setup issue).";
+            throw new Error(statusMessage);
         }
+
+        if (availability === 'downloadable' || availability === 'downloading') {
+            statusMessage = `Model is currently '${availability}'. ATTEMPTING DOWNLOAD/INITIALIZATION. Wait 1-5 mins.`;
+            console.warn(statusMessage);
+        }
+        
+        // --- CRITICAL STEP: Calling create() to finalize model setup/download ---
+        // This promise will resolve once the model is ready.
+        const session = await LanguageModel.create({ temperature: 0.8 });
+
+        // If we reach here, the model is fully initialized!
+        
+        // --- 1. Summarizer API ---
+        const summaryResult = await AI_MODELS.summarizer.summarize({ text: leadershipText });
+        const leadershipSummary = summaryResult.output.split('\n');
+
+        // --- 2. Prompt API ---
+        const prompt = `Based on the following: 
+            Stock Type: ${stockType}
+            Macro Trend: ${macroTrend}
+            1. Generate a 3-point trading strategy (Timing, Risk, Allocation).
+            2. Write a 2-paragraph highly BULLISH investment scenario for the next 12 months.
+            Format the response as clear, readable text blocks.`;
+
+        const aiResponse = await session.prompt({ prompt: prompt });
+        session.destroy();
+
+        const parts = aiResponse.text.split('2. Write a 2-paragraph highly BULLISH investment scenario');
+
+        return {
+            strategy: parts[0].trim(),
+            bullishScenario: '2. Write a 2-paragraph highly BULLISH investment scenario' + parts[1].trim(),
+            leadershipSummary: leadershipSummary
+        };
+
+    } catch (e) {
+        console.error("Gemini Nano Inference Error:", e);
+        // Ensure the fallback uses the mock objects to avoid crashing the UI
+        const mockResponse = await AI_MODELS.prompt.prompt({ prompt: "strategy" }); 
+        const mockSummary = await AI_MODELS.summarizer.summarize({ text: leadershipText });
+        
+        return {
+            strategy: `[CRITICAL EPP ERROR: ${statusMessage}] | Running Mock Data.`,
+            bullishScenario: `[Error: ${e.message}]. Please wait for model download to complete.`,
+            leadershipSummary: mockSummary.output.split('\n')
+        };
     }
 }
 
