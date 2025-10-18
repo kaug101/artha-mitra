@@ -97,6 +97,7 @@ function getDetailedAnalysis(rawFinancials) {
 
     // Show the section and display the loading message inside the first element
     detailsSection.style.display = 'block';
+    document.getElementById('toggleDetails').textContent = 'Hide Background & AI Analysis';
     leadershipSummaryEl.innerHTML = '<p style="color:red;">Running AI Analysis (Hybrid Mode)...</p>';
     strategyOutputEl.textContent = '';
     bullishScenarioEl.textContent = '';
@@ -113,8 +114,13 @@ function getDetailedAnalysis(rawFinancials) {
             return;
         }
 
+        if (!aiResponse) {
+             leadershipSummaryEl.innerHTML = '<p style="color:red;">Received an empty response from the background script.</p>';
+            return;
+        }
+
         // Correctly populate the specific elements with the final results
-        leadershipSummaryEl.innerHTML = aiResponse.leadershipSummary.join('<br>') || '';
+        leadershipSummaryEl.innerHTML = Array.isArray(aiResponse.leadershipSummary) ? aiResponse.leadershipSummary.join('<br>') : (aiResponse.leadershipSummary || '');
         strategyOutputEl.textContent = aiResponse.strategy || '';
         bullishScenarioEl.textContent = aiResponse.bullishScenario || '';
     });

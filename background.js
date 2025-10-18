@@ -66,8 +66,8 @@ async function handleValuation(ticker) {
 /**
  * Creates a promise that rejects after a specified timeout.
  */
-function timeout(ms) {
-    return new Promise((_, reject) => setTimeout(() => reject(new Error('Nano initialization timed out')), ms));
+function timeout(ms, message) {
+    return new Promise((_, reject) => setTimeout(() => reject(new Error(message || 'Nano initialization timed out')), ms));
 }
 
 async function getAIAnalysis(leadershipText, stockType, macroTrend) {
@@ -89,7 +89,7 @@ async function getAIAnalysis(leadershipText, stockType, macroTrend) {
         
         session = await Promise.race([
             LanguageModel.create({ temperature: 0.8, topK: 5 }),
-            timeout(5000) // 5 seconds
+            timeout(5000, "Local Nano model timed out.") 
         ]);
 
         // --- LOCAL NANO EXECUTION SUCCESS ---
@@ -147,6 +147,7 @@ async function generateCloudAnalysis(prompt) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
+            // *** CRITICAL FIX: The parameter must be 'generationConfig' not 'config' ***
             generationConfig: {
                 temperature: 0.7,
                 responseMimeType: "application/json", 
@@ -169,8 +170,8 @@ async function generateCloudAnalysis(prompt) {
 
     const data = await response.json();
     
-    if (!data.candidates || data.candidates.length === 0) {
-         throw new Error("Cloud API returned no content candidates.");
+    if (!data.candidates || !data.candidates[0].content) {
+         throw new Error("Cloud API returned no valid candidates in the response.");
     }
 
     const rawJsonText = data.candidates[0].content.parts[0].text;
