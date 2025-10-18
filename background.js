@@ -65,8 +65,6 @@ async function handleValuation(ticker) {
 
 /**
  * Creates a promise that rejects after a specified timeout.
- * @param {number} ms - The timeout duration in milliseconds.
- * @returns {Promise} A promise that rejects.
  */
 function timeout(ms) {
     return new Promise((_, reject) => setTimeout(() => reject(new Error('Nano initialization timed out')), ms));
@@ -89,8 +87,6 @@ async function getAIAnalysis(leadershipText, stockType, macroTrend) {
         
         console.log("Attempting local model initialization (5-second timeout)...");
         
-        // --- TIMEOUT IMPLEMENTATION ---
-        // Race the create() call against a 5-second timeout.
         session = await Promise.race([
             LanguageModel.create({ temperature: 0.8, topK: 5 }),
             timeout(5000) // 5 seconds
@@ -151,11 +147,11 @@ async function generateCloudAnalysis(prompt) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { // Corrected from 'config' to 'generationConfig'
+            generationConfig: {
                 temperature: 0.7,
                 responseMimeType: "application/json", 
                 responseSchema: {
-                    type: "OBJECT", // Use OBJECT for consistency
+                    type: "OBJECT",
                     properties: {
                         strategy: { type: "STRING" },
                         bullishScenario: { type: "STRING" },
@@ -198,3 +194,4 @@ async function getAINewsInsight(title, snippet) {
         return { why: "AI analysis unavailable.", action: "Review the full article manually." };
     }
 }
+
