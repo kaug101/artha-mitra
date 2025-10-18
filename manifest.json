@@ -12,7 +12,8 @@
   
   "host_permissions": [
     "https://*.yourservice.com/",  
-    "https://*.financialdataapi.com/*" 
+    "https://*.financialdataapi.com/",
+    "https://generativelanguage.googleapis.com/" 
   ],
   
   "action": {

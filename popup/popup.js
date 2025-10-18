@@ -1,5 +1,46 @@
 // popup/popup.js
 
+const API_KEY_STORAGE_KEY = 'geminiCloudApiKey';
+
+// --- Function to Load Key Status on Popup Open ---
+async function loadApiKeyStatus() {
+    const statusElement = document.getElementById('keyStatus');
+    const inputElement = document.getElementById('geminiApiKeyInput');
+
+    const result = await chrome.storage.local.get(API_KEY_STORAGE_KEY);
+    const storedKey = result[API_KEY_STORAGE_KEY];
+
+    if (storedKey) {
+        statusElement.textContent = 'Status: Cloud API Key is saved and ready.';
+        statusElement.style.color = 'green';
+        inputElement.placeholder = 'Key is saved (Click Save to update)';
+    } else {
+        statusElement.textContent = 'Status: Cloud API Key is missing. Hybrid mode disabled.';
+        statusElement.style.color = 'red';
+        inputElement.placeholder = 'Enter Gemini Cloud API Key';
+    }
+}
+
+// --- Event Listener for Saving Key ---
+document.getElementById('saveApiKeyButton').addEventListener('click', async () => {
+    const inputElement = document.getElementById('geminiApiKeyInput');
+    const key = inputElement.value.trim();
+    const statusElement = document.getElementById('keyStatus');
+
+    if (key) {
+        await chrome.storage.local.set({ [API_KEY_STORAGE_KEY]: key });
+        inputElement.value = ''; // Clear input after saving
+        loadApiKeyStatus();
+    } else {
+        statusElement.textContent = 'Error: Please enter a valid key.';
+        statusElement.style.color = 'orange';
+    }
+});
+
+// Load the status when the DOM content is loaded
+document.addEventListener('DOMContentLoaded', loadApiKeyStatus);
+
+// --- Analyze Button Logic ---
 document.getElementById('analyzeButton').addEventListener('click', () => {
     const ticker = document.getElementById('tickerInput').value.toUpperCase().trim();
     if (!ticker) {
@@ -9,6 +50,12 @@ document.getElementById('analyzeButton').addEventListener('click', () => {
 
     document.getElementById('results').style.display = 'none';
     document.getElementById('loading').style.display = 'block';
+    
+    // Clear previous AI output fields
+    document.getElementById('strategyOutput').textContent = '';
+    document.getElementById('bullishScenario').textContent = '';
+    document.getElementById('leadershipSummary').innerHTML = '';
+
 
     // Send message to background.js to start valuation
     chrome.runtime.sendMessage({ action: "runValuation", ticker: ticker }, (response) => {
@@ -53,15 +100,13 @@ function getDetailedAnalysis(rawFinancials) {
         // Clear temp loading message
         document.getElementById('detailsSection').innerHTML = ''; 
         
-        document.getElementById('detailsSection').insertAdjacentHTML('afterbegin', `
-            <h3>AI Analysis (Powered by Gemini Nano)</h3>
-            <h4>Leadership Analysis (Summarizer API)</h4>
-            <p>${aiResponse.leadershipSummary.join('<br>') || aiResponse.leadershipSummary}</p> 
-            
-            <h4>Strategy & Bullish Scenario (Prompt API)</h4>
-            <pre>${aiResponse.strategy}</pre>
-            <pre>${aiResponse.bullishScenario}</pre>
-            
+        // Display AI output or fallback/error messages
+        document.getElementById('strategyOutput').textContent = aiResponse.strategy;
+        document.getElementById('bullishScenario').textContent = aiResponse.bullishScenario;
+        document.getElementById('leadershipSummary').innerHTML = aiResponse.leadershipSummary.join('<br>') || aiResponse.leadershipSummary; // Handles bullet points
+        
+        // Restore the standard details section UI
+        document.getElementById('detailsSection').insertAdjacentHTML('beforeend', `
             <button class="prompt-button" onclick="alert('Re-check Numbers function would trigger a content script (content.js) to scrape live L2 data.')">Re-check Numbers (L2 Data)</button>
         `);
     });
@@ -78,26 +123,3 @@ document.getElementById('noFeedback').addEventListener('click', () => {
     alert('Thank you for using Artha-Mitra! We invite your feedback: https://forms.gle/31fUb9PxCfn1x79TA');
 });
 
-// Mock Global News integration (Would be pulled from background.js via chrome.storage)
-// The news item analysis would be done by getAINewsInsight in background.js
-// This part is for visual demo only.
-// In the actual hackathon, you'd fetch 10 news items and run getAINewsInsight on each.
-
-function mockNewsDisplay() {
-    const newsItem = {
-        title: "Fed signals potential rate hike, warns of sticky inflation",
-        snippet: "Chairman Powell mentioned ongoing labor market strength and elevated energy costs as key concerns in the latest minutes.",
-        affectedStocks: "SPY, TLT, Financials"
-    };
-
-    chrome.runtime.sendMessage({ 
-        action: "getAINewsInsight", 
-        newsTitle: newsItem.title, 
-        newsSnippet: newsItem.snippet 
-    }, (insight) => {
-        console.log("News Insight:", insight);
-        // For the demo, you could display this in a dedicated News tab in the popup
-    });
-}
-
-// mockNewsDisplay(); // Uncomment to test news API call

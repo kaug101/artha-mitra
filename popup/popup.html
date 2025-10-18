@@ -40,6 +40,13 @@
         <button class="quick-reply-btn" id="noFeedback">No</button>
     </div>
 
+    <div id="apiKeySection" style="margin-top: 15px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; background-color: #f0f0f0;">
+        <h4>Hybrid AI Setup (API Key Required)</h4>
+        <input type="password" id="geminiApiKeyInput" placeholder="Enter Gemini Cloud API Key">
+        <button id="saveApiKeyButton" class="prompt-button" style="background-color: #007bff; margin-top: 5px;">Save Key</button>
+        <p id="keyStatus" style="font-size: 0.8em; margin-top: 5px;"></p>
+    </div>
+
     <script src="popup.js"></script>
 </body>
 </html>
