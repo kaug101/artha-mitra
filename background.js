@@ -63,9 +63,6 @@ async function handleValuation(ticker) {
 
 // --- 4. HYBRID AI LOGIC ---
 
-/**
- * Creates a promise that rejects after a specified timeout.
- */
 function timeout(ms, message) {
     return new Promise((_, reject) => setTimeout(() => reject(new Error(message || 'Nano initialization timed out')), ms));
 }
@@ -127,6 +124,7 @@ async function getAIAnalysis(leadershipText, stockType, macroTrend) {
             };
         }
     } finally {
+        // *** CRITICAL FIX: Only destroy the session IF it was successfully created. ***
         if (session) {
             session.destroy().catch(err => console.warn("Session cleanup failed:", err));
         }
