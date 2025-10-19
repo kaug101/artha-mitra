@@ -6,6 +6,7 @@ const API_KEY_STORAGE_KEY = 'geminiCloudApiKey';
 async function loadApiKeyStatus() {
     const statusElement = document.getElementById('keyStatus');
     const inputElement = document.getElementById('geminiApiKeyInput');
+    const cloudIcon = document.getElementById('cloudKeyIcon');
 
     try {
         const result = await chrome.storage.local.get(API_KEY_STORAGE_KEY);
@@ -15,10 +16,14 @@ async function loadApiKeyStatus() {
             statusElement.textContent = 'Status: Cloud API Key is saved. Cloud-first mode is ACTIVE.';
             statusElement.style.color = 'green';
             inputElement.placeholder = 'Key is saved (Click to update)';
+            cloudIcon.style.stroke = 'green';
+            cloudIcon.style.fill = 'green';
         } else {
             statusElement.textContent = 'Status: Cloud API Key is missing. Using on-device Nano model.';
             statusElement.style.color = 'red';
             inputElement.placeholder = 'Enter Gemini Cloud API Key';
+            cloudIcon.style.stroke = 'red';
+            cloudIcon.style.fill = 'red';
         }
     } catch (e) {
         console.error("Error loading API key status:", e);
@@ -135,4 +140,25 @@ document.getElementById('toggleDetails').addEventListener('click', (e) => {
     e.target.textContent = isVisible ? 'Show Background & AI Analysis' : 'Hide Background & AI Analysis';
 });
 
+// --- Modal Logic ---
+const modal = document.getElementById('apiKeyModal');
+const cloudIcon = document.getElementById('cloudKeyIcon');
+const closeButton = document.querySelector('.close-button');
+
+// When the user clicks the cloud icon, open the modal 
+cloudIcon.onclick = function() {
+  modal.style.display = "block";
+}
+
+// When the user clicks on <span> (x), close the modal
+closeButton.onclick = function() {
+  modal.style.display = "none";
+}
+
+// When the user clicks anywhere outside of the modal, close it
+window.onclick = function(event) {
+  if (event.target == modal) {
+    modal.style.display = "none";
+  }
+}
 
