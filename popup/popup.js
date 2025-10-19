@@ -12,11 +12,11 @@ async function loadApiKeyStatus() {
         const storedKey = result[API_KEY_STORAGE_KEY];
 
         if (storedKey) {
-            statusElement.textContent = 'Status: Cloud API Key is saved and ready.';
+            statusElement.textContent = 'Status: Cloud API Key is saved. Cloud-first mode is ACTIVE.';
             statusElement.style.color = 'green';
             inputElement.placeholder = 'Key is saved (Click to update)';
         } else {
-            statusElement.textContent = 'Status: Cloud API Key is missing. Hybrid mode disabled.';
+            statusElement.textContent = 'Status: Cloud API Key is missing. Using on-device Nano model.';
             statusElement.style.color = 'red';
             inputElement.placeholder = 'Enter Gemini Cloud API Key';
         }
@@ -34,6 +34,9 @@ document.getElementById('saveApiKeyButton').addEventListener('click', async () =
     if (key) {
         await chrome.storage.local.set({ [API_KEY_STORAGE_KEY]: key });
         inputElement.value = ''; // Clear input after saving
+    } else {
+        // Allow users to clear the key
+        await chrome.storage.local.remove(API_KEY_STORAGE_KEY);
     }
     loadApiKeyStatus(); // Refresh status
 });
@@ -89,16 +92,17 @@ function displayResults(ticker, data) {
 }
 
 function getDetailedAnalysis(rawFinancials) {
-    // --- CORRECTED UI UPDATE LOGIC ---
+    // --- UI Elements ---
     const detailsSection = document.getElementById('detailsSection');
+    const aiHeaderEl = document.getElementById('aiAnalysisHeader');
     const leadershipSummaryEl = document.getElementById('leadershipSummary');
     const strategyOutputEl = document.getElementById('strategyOutput');
     const bullishScenarioEl = document.getElementById('bullishScenario');
 
-    // Show the section and display the loading message inside the first element
+    // Show the section and display the loading message
     detailsSection.style.display = 'block';
-    document.getElementById('toggleDetails').textContent = 'Hide Background & AI Analysis';
-    leadershipSummaryEl.innerHTML = '<p style="color:red;">Running AI Analysis (Hybrid Mode)...</p>';
+    aiHeaderEl.textContent = 'AI Analysis';
+    leadershipSummaryEl.innerHTML = '<p style="color:orange;">Running AI Analysis (Cloud-First)...</p>';
     strategyOutputEl.textContent = '';
     bullishScenarioEl.textContent = '';
 
@@ -110,17 +114,13 @@ function getDetailedAnalysis(rawFinancials) {
     }, (aiResponse) => {
         if (chrome.runtime.lastError) {
             console.error("Error receiving AI analysis:", chrome.runtime.lastError.message);
-            leadershipSummaryEl.innerHTML = '<p style="color:red;">Failed to get a response from the AI model.</p>';
+            leadershipSummaryEl.innerHTML = `<p style="color:red;">Failed to connect to the background script. Check the extension's error logs.</p>`;
             return;
         }
 
-        if (!aiResponse) {
-             leadershipSummaryEl.innerHTML = '<p style="color:red;">Received an empty response from the background script.</p>';
-            return;
-        }
-
-        // Correctly populate the specific elements with the final results
-        leadershipSummaryEl.innerHTML = Array.isArray(aiResponse.leadershipSummary) ? aiResponse.leadershipSummary.join('<br>') : (aiResponse.leadershipSummary || '');
+        // Update UI with results and indicate the source
+        aiHeaderEl.textContent = `AI Analysis (Powered by Gemini ${aiResponse.source})`;
+        leadershipSummaryEl.innerHTML = aiResponse.leadershipSummary.join('<br>') || '';
         strategyOutputEl.textContent = aiResponse.strategy || '';
         bullishScenarioEl.textContent = aiResponse.bullishScenario || '';
     });
@@ -135,7 +135,4 @@ document.getElementById('toggleDetails').addEventListener('click', (e) => {
     e.target.textContent = isVisible ? 'Show Background & AI Analysis' : 'Hide Background & AI Analysis';
 });
 
-document.getElementById('noFeedback').addEventListener('click', () => {
-    alert('Thank you for using Artha-Mitra! We invite your feedback: https://forms.gle/31fUb9PxCfn1x79TA');
-});
 

@@ -17,19 +17,19 @@ const MOCK_FALLBACK = {
             return { output: "Mock Summary: Leadership is stable, according to pre-processed data." };
         }
     },
-    LanguageModel: undefined 
+    LanguageModel: undefined
 };
 
 // --- 1. Global API Initialization ---
 const AI_MODELS = self.ai || chrome.ai || MOCK_FALLBACK;
-const LanguageModel = AI_MODELS.LanguageModel || self.LanguageModel; 
+const LanguageModel = AI_MODELS.LanguageModel || self.LanguageModel;
 
 
 // --- 2. CORE MESSAGE LISTENER ---
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "runValuation") {
         handleValuation(request.ticker).then(sendResponse);
-        return true; 
+        return true;
     } else if (request.action === "getAIAnalysis") {
         getAIAnalysis(request.leadershipText, request.stockType, request.macroTrend).then(sendResponse);
         return true;
@@ -44,11 +44,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // --- 3. DCF/Data Logic (Mocked) ---
 async function handleValuation(ticker) {
     const mockData = {
-        AAPL: { 
-            price: 185.5, 
-            date: "Oct 17, 2025", 
+        AAPL: {
+            price: 185.5,
+            date: "Oct 17, 2025",
             source: "Mock API",
-            targets: { '3m': 190, '6m': 205, '12m': 230 } 
+            targets: { '3m': 190, '6m': 205, '12m': 230 }
         },
     };
     const stock = mockData[ticker.toUpperCase()] || { price: 'N/A', targets: {} };
@@ -61,75 +61,85 @@ async function handleValuation(ticker) {
 }
 
 
-// --- 4. HYBRID AI LOGIC ---
+// --- 4. HYBRID AI LOGIC (Cloud-First Strategy) ---
 
 function timeout(ms, message) {
     return new Promise((_, reject) => setTimeout(() => reject(new Error(message || 'Nano initialization timed out')), ms));
 }
 
 async function getAIAnalysis(leadershipText, stockType, macroTrend) {
-    let session = null; 
+    const keyResult = await chrome.storage.local.get('geminiCloudApiKey');
+    const hasCloudKey = keyResult.geminiCloudApiKey;
 
-    try {
-        if (!LanguageModel) {
-            throw new Error("CRITICAL: LanguageModel API not found. Switching to Cloud.");
-        }
-
-        const availability = await LanguageModel.availability();
-        console.log(`[Gemini Nano Status] Availability: ${availability}`);
-
-        if (availability !== 'available') {
-            throw new Error(`Nano model is not 'available' (Status: ${availability}). Switching to Cloud.`);
-        }
-        
-        console.log("Attempting local model initialization (5-second timeout)...");
-        
-        session = await Promise.race([
-            LanguageModel.create({ temperature: 0.8, topK: 5 }),
-            timeout(5000, "Local Nano model timed out.") 
-        ]);
-
-        // --- LOCAL NANO EXECUTION SUCCESS ---
-        const summaryResult = await AI_MODELS.summarizer.summarize({ text: leadershipText });
-        const prompt = `Write a 50-word bullish case for a generic technology company, based on their focus on AI.`;
-        const aiResponse = await session.prompt({ prompt });
-        
-        return { 
-            strategy: aiResponse, 
-            bullishScenario: "SUCCESS: Real Gemini Nano output (On-Device Processing).", 
-            leadershipSummary: summaryResult.output.split('\n')
-        };
-
-    } catch (e) {
-        // --- GRACEFUL FALLBACK TO CLOUD ---
-        console.error(`Local Nano Failed: ${e.message}. Triggering Cloud Fallback.`);
-        
+    // --- STRATEGY 1: Prioritize Cloud API if key is available ---
+    if (hasCloudKey) {
+        console.log("Cloud API key found. Prioritizing cloud analysis.");
         const fullPrompt = `Analyze the following: Stock Type: ${stockType}, Macro Trend: ${macroTrend}, Leadership Commentary: "${leadershipText}". Generate a JSON object with 'strategy' (3-point plan), 'bullishScenario' (2 paragraphs), and 'leadershipSummary' (bullet points).`;
-
         try {
             const cloudResult = await generateCloudAnalysis(fullPrompt);
             return {
-                strategy: `[HYBRID SUCCESS: CLOUD FALLBACK] ` + cloudResult.strategy,
+                source: "Cloud",
+                strategy: `[CLOUD ANALYSIS] ` + cloudResult.strategy,
                 bullishScenario: cloudResult.bullishScenario,
                 leadershipSummary: cloudResult.leadershipSummary
             };
         } catch (cloudError) {
-            console.error(`Cloud Fallback Failed. Using Safe Mock. Error: ${cloudError.message}`);
-            const mockResponse = await MOCK_FALLBACK.prompt.prompt({ prompt: "strategy" }); 
-            const mockSummary = await MOCK_FALLBACK.summarizer.summarize({ text: leadershipText });
-            return {
-                strategy: `[CRITICAL FAILURE] Cloud/Network Error. Using Mock Data.`,
-                bullishScenario: `Architecture proved stable with graceful fallback to mock data.`,
-                leadershipSummary: mockSummary.output.split('\n')
-            };
+            console.error(`Cloud analysis failed despite having a key: ${cloudError.message}. Falling back to Nano.`);
+            // If cloud fails, we proceed to the Nano fallback below.
         }
+    }
+
+    // --- STRATEGY 2: Use Nano if key is missing or cloud failed ---
+    console.log("Cloud API key not found or cloud failed. Attempting local Nano model.");
+    let session = null;
+    try {
+        if (!LanguageModel) {
+            throw new Error("CRITICAL: LanguageModel API not found. Cannot run locally.");
+        }
+        const availability = await LanguageModel.availability();
+        if (availability !== 'available') {
+            throw new Error(`Nano model is not 'available' (Status: ${availability}).`);
+        }
+        
+        console.log("Attempting local model initialization (5-second timeout)...");
+        session = await Promise.race([
+            LanguageModel.create({ temperature: 0.8, topK: 5 }),
+            timeout(5000, "Local Nano model timed out.")
+        ]);
+
+        const summaryResult = await AI_MODELS.summarizer.summarize({ text: leadershipText });
+        const prompt = `Write a 50-word bullish case for a generic technology company, based on their focus on AI.`;
+        const aiResponse = await session.prompt({ prompt });
+        
+        return {
+            source: "Nano",
+            strategy: aiResponse.text,
+            bullishScenario: "This analysis was generated on-device using Gemini Nano.",
+            leadershipSummary: summaryResult.output.split('\n')
+        };
+
+    } catch (e) {
+        // --- FINAL FALLBACK: Mock Data ---
+        console.error(`Local Nano Failed: ${e.message}. Using Safe Mock Data as final fallback.`);
+        const mockResponse = await MOCK_FALLBACK.prompt.prompt({ prompt: "strategy" });
+        const mockSummary = await MOCK_FALLBACK.summarizer.summarize({ text: leadershipText });
+        return {
+            source: "Mock",
+            strategy: `[CRITICAL FAILURE] Cloud and Nano failed. Using Mock Data.`,
+            bullishScenario: `Architecture proved stable with graceful fallback to mock data.`,
+            leadershipSummary: mockSummary.output.split('\n')
+        };
     } finally {
-        // *** CRITICAL FIX: Only destroy the session IF it was successfully created. ***
         if (session) {
-            session.destroy().catch(err => console.warn("Session cleanup failed:", err));
+            try {
+                session.destroy();
+            } catch (err) {
+                console.warn("Session cleanup failed:", err);
+            }
         }
     }
 }
+
 
 async function generateCloudAnalysis(prompt) {
     const result = await chrome.storage.local.get('geminiCloudApiKey');
@@ -145,10 +155,9 @@ async function generateCloudAnalysis(prompt) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            // *** CRITICAL FIX: The parameter must be 'generationConfig' not 'config' ***
             generationConfig: {
                 temperature: 0.7,
-                responseMimeType: "application/json", 
+                responseMimeType: "application/json",
                 responseSchema: {
                     type: "OBJECT",
                     properties: {
@@ -179,7 +188,7 @@ async function generateCloudAnalysis(prompt) {
     return {
         strategy: analysis.strategy,
         bullishScenario: analysis.bullishScenario,
-        leadershipSummary: analysis.leadershipSummary.split('\n') 
+        leadershipSummary: analysis.leadershipSummary.split('\n')
     };
 }
 
@@ -193,4 +202,3 @@ async function getAINewsInsight(title, snippet) {
         return { why: "AI analysis unavailable.", action: "Review the full article manually." };
     }
 }
-
