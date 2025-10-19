@@ -15,18 +15,23 @@
     <button id="analyzeButton">Analyze Stock </button>
     
     <div id="loading" style="display:none; color: orange;">
-        <p>Running Valuation & AI Analysis...</p>
+        <p>Fetching Live Data & Running Valuation...</p>
     </div>
 
     <div id="results" style="display:none;">
         <h2 id="stockHeader"></h2>
         <p id="priceInfo"></p>
-        <p>DCF Price Targets:</p>
         <ul id="dcfTargets"></ul>
+        <ul id="estimateTargets" style="margin-top: 15px;"></ul>
         
-        <button id="toggleDetails" class="prompt-button">Show Background & AI Analysis</button>
+        <button id="toggleDetails" class="prompt-button">Show AI Analysis</button>
         
         <div id="detailsSection" style="display:none; margin-top: 10px; border-top: 1px solid #eee;">
+            <div id="dcfCalculationDetails">
+                <h4>Intrinsic Value Calculation</h4>
+                <pre id="dcfCalculationOutput"></pre>
+            </div>
+
             <h3 id="aiAnalysisHeader">AI Analysis</h3>
             
             <h4>Leadership Analysis</h4>
@@ -49,10 +54,15 @@
             <input type="password" id="geminiApiKeyInput" placeholder="Enter Gemini Cloud API Key">
             <button id="saveApiKeyButton" class="prompt-button" style="background-color: #007bff; margin-top: 5px;">Save Key</button>
             <p id="keyStatus" style="font-size: 0.8em; margin-top: 5px;"></p>
+            <hr style="margin: 15px 0;">
+            <h4>Financial Data API Setup</h4>
+            <p>Enter your free <a href="https://site.financialmodelingprep.com/developer/docs" target="_blank">Financial Modeling Prep</a> API key for real-time data.</p>
+            <input type="password" id="fmpApiKeyInput" placeholder="Enter FMP API Key">
+            <button id="saveFmpApiKeyButton" class="prompt-button" style="background-color: #28a745; margin-top: 5px;">Save FMP Key</button>
+            <p id="fmpKeyStatus" style="font-size: 0.8em; margin-top: 5px;"></p>
         </div>
     </div>
 
     <script src="popup.js"></script>
 </body>
 </html>
-

@@ -23,6 +23,53 @@ const MOCK_FALLBACK = {
 // --- 1. Global API Initialization ---
 const AI_MODELS = self.ai || chrome.ai || MOCK_FALLBACK;
 const LanguageModel = AI_MODELS.LanguageModel || self.LanguageModel;
+const FMP_API_KEY_STORAGE_KEY = 'fmpCloudApiKey';
+
+// --- Function to create and manage the popup window ---
+function createPopupWindow() {
+  chrome.windows.create({
+    url: 'popup/popup.html',
+    type: 'popup',
+    width: 400,
+    height: 650
+  }, (window) => {
+    // Store the window ID so we don't open multiple windows
+    chrome.storage.local.set({ popupWindowId: window.id });
+  });
+}
+
+// --- Listen for the extension icon click ---
+chrome.action.onClicked.addListener((tab) => {
+  chrome.storage.local.get('popupWindowId', (data) => {
+    const popupId = data.popupWindowId;
+
+    if (popupId) {
+      // If a window ID is stored, try to focus it
+      chrome.windows.get(popupId, (window) => {
+        if (chrome.runtime.lastError) {
+          // The window was closed without us knowing. Create a new one.
+          createPopupWindow();
+        } else {
+          // The window exists, just focus it.
+          chrome.windows.update(popupId, { focused: true });
+        }
+      });
+    } else {
+      // No window ID is stored, so create a new one.
+      createPopupWindow();
+    }
+  });
+});
+
+// --- Listen for when a window is closed ---
+chrome.windows.onRemoved.addListener((windowId) => {
+    chrome.storage.local.get('popupWindowId', (data) => {
+        if (data.popupWindowId === windowId) {
+            // The popup window was closed, so remove its ID from storage
+            chrome.storage.local.remove('popupWindowId');
+        }
+    });
+});
 
 
 // --- 2. CORE MESSAGE LISTENER ---
@@ -41,23 +88,207 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 
-// --- 3. DCF/Data Logic (Mocked) ---
-async function handleValuation(ticker) {
-    const mockData = {
-        AAPL: {
-            price: 185.5,
-            date: "Oct 17, 2025",
-            source: "Mock API",
-            targets: { '3m': 190, '6m': 205, '12m': 230 }
+// --- 3. DCF/Data Logic (REAL DATA) ---
+
+async function getFmpApiKey() {
+    const result = await chrome.storage.local.get(FMP_API_KEY_STORAGE_KEY);
+    return result[FMP_API_KEY_STORAGE_KEY];
+}
+
+// Function to fetch data from Financial Modeling Prep
+async function fetchFinancialData(ticker, apiKey) {
+    const endpoints = {
+        profile: `https://financialmodelingprep.com/stable/profile?symbol=${ticker}&apikey=${apiKey}`,
+        cashFlow: `https://financialmodelingprep.com/stable/cash-flow-statement?symbol=${ticker}&period=quarter&apikey=${apiKey}`,
+        incomeStatement: `https://financialmodelingprep.com/stable/income-statement?symbol=${ticker}&period=quarter&apikey=${apiKey}`,
+        enterpriseValue: `https://financialmodelingprep.com/stable/enterprise-values?symbol=${ticker}&period=quarter&apikey=${apiKey}`
+    };
+
+    try {
+        const [profileRes, cashFlowRes, incomeRes, evRes] = await Promise.all([
+            fetch(endpoints.profile),
+            fetch(endpoints.cashFlow),
+            fetch(endpoints.incomeStatement),
+            fetch(endpoints.enterpriseValue)
+        ]);
+
+        if (!profileRes.ok || !cashFlowRes.ok || !incomeRes.ok || !evRes.ok) {
+            // Find the first failing response to get its details
+            const failedResponse = [profileRes, cashFlowRes, incomeRes, evRes].find(res => !res.ok);
+            let detailedError = `API request failed with status: ${failedResponse.status}.`;
+
+            // Provide more specific feedback for common HTTP errors
+            if (failedResponse.status === 403 || failedResponse.status === 401) {
+                try {
+                    const errorData = await failedResponse.json();
+                    // FMP API often provides a 'message' or 'error' key
+                    const apiMessage = errorData.message || errorData.error || "Please verify your FMP API key and plan permissions.";
+                    detailedError = `API Error (${failedResponse.status}): ${apiMessage}`;
+                } catch (e) {
+                    detailedError = `API Error (${failedResponse.status}). The API key may be invalid or your plan may not have access to this data.`;
+                }
+            }
+            throw new Error(detailedError);
+        }
+
+        const profileData = await profileRes.json();
+        const cashFlowData = await cashFlowRes.json();
+        const incomeData = await incomeRes.json();
+        const evData = await evRes.json();
+
+        if (!profileData.length || !cashFlowData.length || !incomeData.length || !evData.length) {
+            throw new Error('Incomplete data from API for DCF calculation.');
+        }
+        
+        return {
+            price: profileData[0].price,
+            freeCashFlow: cashFlowData.map(d => d.freeCashFlow),
+            revenue: incomeData.map(d => d.revenue),
+            sharesOutstanding: evData[0].numberOfShares,
+        };
+    } catch (error) {
+        console.error("Error fetching financial data:", error);
+        throw error; // Re-throw to be caught by the caller
+    }
+}
+
+
+// Simplified DCF Calculation
+function calculateDCF(financials) {
+    // --- 1. DEFINE ASSUMPTIONS ---
+    const projectionYears = 5;
+    const terminalGrowthRate = 0.025; // Standard terminal growth rate (inflation)
+    const discountRate = 0.09; // WACC assumption - can be refined with Beta
+
+    // --- 2. GATHER INPUTS ---
+    const recentFCF = financials.freeCashFlow[0];
+    if (recentFCF <= 0) {
+        throw new Error("Cannot run DCF on company with negative Free Cash Flow.");
+    }
+    const sharesOutstanding = financials.sharesOutstanding;
+    
+    // --- 3. CALCULATE FCF GROWTH RATE ---
+    // Use historical free cash flow growth directly.
+    const cashFlows = financials.freeCashFlow.slice().reverse(); // Oldest to newest
+    let growthSum = 0;
+    let validPeriods = 0;
+    for (let i = 1; i < cashFlows.length; i++) {
+        // Only calculate growth if the previous period's FCF was positive to avoid misleading figures
+        if (cashFlows[i - 1] > 0) {
+            const growth = (cashFlows[i] - cashFlows[i - 1]) / cashFlows[i - 1];
+            growthSum += growth;
+            validPeriods++;
+        }
+    }
+    const averageGrowth = validPeriods > 0 ? growthSum / validPeriods : 0.03; // Default to 3% if no data
+    // Cap and floor the growth rate for stability
+    const fcfGrowthRate = Math.min(Math.max(averageGrowth, 0.01), 0.15); 
+
+    // --- 4. PROJECT FUTURE FCF & DISCOUNT TO PRESENT ---
+    let presentValueFCF = 0;
+    let lastProjectedFCF = recentFCF;
+    const projectedFcfList = [];
+    for (let i = 1; i <= projectionYears; i++) {
+        const projectedFCF = lastProjectedFCF * (1 + fcfGrowthRate);
+        projectedFcfList.push(projectedFCF);
+        presentValueFCF += projectedFCF / Math.pow(1 + discountRate, i);
+        lastProjectedFCF = projectedFCF;
+    }
+
+    // --- 5. CALCULATE TERMINAL VALUE & DISCOUNT TO PRESENT ---
+    const terminalValue = (lastProjectedFCF * (1 + terminalGrowthRate)) / (discountRate - terminalGrowthRate);
+    const presentTerminalValue = terminalValue / Math.pow(1 + discountRate, projectionYears);
+
+    // --- 6. CALCULATE FINAL INTRINSIC VALUE ---
+    const intrinsicValue = presentValueFCF + presentTerminalValue;
+    const dcfPrice = intrinsicValue / sharesOutstanding;
+
+    return {
+        dcfPrice: dcfPrice,
+        inputs: {
+            fcfGrowthRate: fcfGrowthRate,
+            discountRate: discountRate,
+            recentFCF: recentFCF,
+            sharesOutstanding: sharesOutstanding,
+            terminalGrowthRate: terminalGrowthRate,
         },
+        calculation: {
+            projectedFcfList: projectedFcfList,
+            presentValueFCF: presentValueFCF,
+            terminalValue: terminalValue,
+            presentTerminalValue: presentTerminalValue,
+            intrinsicValue: intrinsicValue
+        }
     };
-    const stock = mockData[ticker.toUpperCase()] || { price: 'N/A', targets: {} };
-    const rawFinancials = {
-        leadershipText: "Tim Cook, CEO, recently stated: 'Our focus on the Vision Pro ecosystem and services will drive long-term value...'",
-        stockType: "Mature Growth Stock",
-        macroTrend: "Rising rates and tech consolidation"
+}
+
+// --- Function to estimate future price targets ---
+function calculatePriceEstimates(currentPrice, dcfPrice) {
+    const upside = dcfPrice - currentPrice;
+    // Assume linear convergence to intrinsic value over 12 months
+    const estimate3M = currentPrice + upside * 0.25; // 3/12
+    const estimate6M = currentPrice + upside * 0.50; // 6/12
+    const estimate12M = dcfPrice;
+
+    return {
+        threeMonth: estimate3M,
+        sixMonth: estimate6M,
+        twelveMonth: estimate12M
     };
-    return { ...stock, rawFinancials };
+}
+
+
+async function handleValuation(ticker) {
+    const fmpApiKey = await getFmpApiKey();
+    if (!fmpApiKey) {
+        // Fallback to old mock data if no key
+        console.warn("FMP API Key not found. Falling back to mock data.");
+        return {
+            price: 185.5,
+            date: "N/A",
+            source: "Mock Data (Add FMP Key)",
+            dcf: { 
+                dcfPrice: 200, 
+                inputs: { fcfGrowthRate: 0.05, discountRate: 0.09, recentFCF: 50e9, sharesOutstanding: 15e9, terminalGrowthRate: 0.025 },
+                calculation: { projectedFcfList: [52.5e9, 55.125e9, 57.88e9, 60.77e9, 63.81e9], presentValueFCF: 230e9, terminalValue: 1000e9, presentTerminalValue: 620e9, intrinsicValue: 850e9 }
+            },
+            estimates: {
+                threeMonth: 189.13,
+                sixMonth: 192.75,
+                twelveMonth: 200.00
+            },
+            rawFinancials: {
+                leadershipText: "Tim Cook, CEO, recently stated: 'Our focus on the Vision Pro ecosystem and services will drive long-term value...'",
+                stockType: "Mature Growth Stock",
+                macroTrend: "Rising rates and tech consolidation"
+            },
+            error: "FMP API Key not found. Please add it via the cloud icon."
+        };
+    }
+
+    try {
+        const financialData = await fetchFinancialData(ticker, fmpApiKey);
+        const dcfResult = calculateDCF(financialData);
+        const priceEstimates = calculatePriceEstimates(financialData.price, dcfResult.dcfPrice);
+
+        // This data is still needed for the AI analysis part
+        const rawFinancials = {
+            leadershipText: `Mock leadership text for ${ticker}. Focus on innovation and market expansion.`, // This can be replaced with a real news API call later
+            stockType: "Growth Stock", // This can also be refined
+            macroTrend: "Global economic recovery"
+        };
+        
+        return {
+            price: financialData.price,
+            dcf: dcfResult,
+            estimates: priceEstimates,
+            rawFinancials: rawFinancials
+        };
+
+    } catch (error) {
+        console.error(`Valuation failed for ${ticker}:`, error);
+        return { price: 'N/A', dcf: { dcfPrice: 'Error' }, error: error.message };
+    }
 }
 
 
@@ -202,3 +433,4 @@ async function getAINewsInsight(title, snippet) {
         return { why: "AI analysis unavailable.", action: "Review the full article manually." };
     }
 }
+

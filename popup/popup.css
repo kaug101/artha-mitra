@@ -74,18 +74,18 @@ h2, h3, h4 {
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
-#dcfTargets {
+#dcfTargets, #estimateTargets {
     list-style: none;
     padding: 0;
 }
 
-#dcfTargets li {
+#dcfTargets li, #estimateTargets li {
     padding: 5px 0;
     border-bottom: 1px dotted #eee;
     font-size: 0.9em;
 }
 /* Ensure the last item doesn't have a border */
-#dcfTargets li:last-child {
+#dcfTargets li:last-child, #estimateTargets li:last-child {
     border-bottom: none; 
 }
 
