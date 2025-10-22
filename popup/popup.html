@@ -5,43 +5,115 @@
     <link rel="stylesheet" href="popup.css">
 </head>
 <body>
+    <div id="notification" class="notification-bar" style="display:none;"></div>
+
     <!-- Header with Cloud Icon -->
     <div class="header-container">
         <h1>Artha-Mitra</h1>
         <svg id="cloudKeyIcon" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
     </div>
 
-    <input type="text" id="tickerInput" placeholder="Enter Ticker (e.g., AAPL)">
-    <button id="analyzeButton">Analyze Stock </button>
-    
+    <!-- Ticker Input for single stock -->
+    <input type="text" id="tickerInput" placeholder="Enter Single Ticker (e.g., AAPL)">
+    <button id="analyzeButton">Fetch DCF Parameters</button>
+
     <div id="loading" style="display:none; color: orange;">
-        <p>Fetching Live Data & Running Valuation...</p>
+        <p>Contacting Gemini for DCF Parameters...</p>
     </div>
 
-    <div id="results" style="display:none;">
-        <h2 id="stockHeader"></h2>
-        <p id="priceInfo"></p>
-        <ul id="dcfTargets"></ul>
-        <ul id="estimateTargets" style="margin-top: 15px;"></ul>
-        
-        <button id="toggleDetails" class="prompt-button">Show AI Analysis</button>
-        
-        <div id="detailsSection" style="display:none; margin-top: 10px; border-top: 1px solid #eee;">
-            <div id="dcfCalculationDetails">
-                <h4>Intrinsic Value Calculation</h4>
-                <pre id="dcfCalculationOutput"></pre>
+    <!-- This container holds the new DCF interface -->
+    <div id="dcf-container" style="display:none;">
+        <h2 id="stockHeader" style="margin-bottom: 0;"></h2>
+        <p id="priceInfo" style="margin-top: 2px; font-size: 0.9em;"></p>
+
+        <!-- DCF Input Parameters -->
+        <div id="dcf-inputs">
+            <h4>DCF Parameters (Values in Millions USD)</h4>
+            
+            <div class="dcf-parameter">
+                <label>TTM Free Cash Flow</label>
+                <div class="input-group">
+                    <input type="number" id="input-ttmFcf" step="100">
+                </div>
+                <small id="quarterlyFcfDisplay" style="width: 100%; font-size: 0.8em; color: #555;"></small>
             </div>
 
-            <h3 id="aiAnalysisHeader">AI Analysis</h3>
-            
-            <h4>Leadership Analysis</h4>
-            <p id="leadershipSummary"></p>
+            <div class="dcf-parameter">
+                <label>FCF Growth (5-Yr)</label>
+                <div class="input-group">
+                    <button class="adjust-btn" data-field="fcfGrowth" data-op="-">-</button>
+                    <input type="number" id="input-fcfGrowth" step="0.005">
+                    <button class="adjust-btn" data-field="fcfGrowth" data-op="+">+</button>
+                </div>
+            </div>
 
-            <h4>Strategy & Bullish Scenario</h4>
-            <pre id="strategyOutput"></pre>
-            <pre id="bullishScenario"></pre>
-            
-            <button class="prompt-button" onclick="alert('Re-check Numbers function would trigger a content script (content.js) to scrape live L2 data.')">Re-check Numbers (L2 Data)</button>
+            <div class="dcf-parameter">
+                <label>WACC</label>
+                <div class="input-group">
+                    <button class="adjust-btn" data-field="wacc" data-op="-">-</button>
+                    <input type="number" id="input-wacc" step="0.001">
+                    <button class="adjust-btn" data-field="wacc" data-op="+">+</button>
+                </div>
+            </div>
+
+            <div class="dcf-parameter">
+                <label>Net Debt</label>
+                <div class="input-group">
+                    <button class="adjust-btn" data-field="netDebt" data-op="-">-</button>
+                    <input type="number" id="input-netDebt" step="100">
+                    <button class="adjust-btn" data-field="netDebt" data-op="+">+</button>
+                </div>
+            </div>
+
+             <div class="dcf-parameter">
+                <label>Shares Outstanding</label>
+                <div class="input-group">
+                    <button class="adjust-btn" data-field="shares" data-op="-">-</button>
+                    <input type="number" id="input-shares" step="10">
+                    <button class="adjust-btn" data-field="shares" data-op="+">+</button>
+                </div>
+            </div>
+
+            <div class="dcf-parameter">
+                <label>Perpetual Growth</label>
+                <div class="input-group">
+                    <button class="adjust-btn" data-field="perpGrowth" data-op="-">-</button>
+                    <input type="number" id="input-perpGrowth" step="0.001">
+                    <button class="adjust-btn" data-field="perpGrowth" data-op="+">+</button>
+                </div>
+            </div>
+        </div>
+
+        <button id="calculateButton" class="prompt-button" style="background-color: #28a745; margin-top: 15px;">Calculate Intrinsic Value</button>
+
+        <!-- Final Calculation Results -->
+        <div id="final-results" style="display:none; margin-top: 15px; background-color: #fff; padding: 10px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <h3>Calculated Value: <span id="intrinsicValue" style="color: #007bff;"></span></h3>
+            <ul id="newEstimateTargets" style="list-style: none; padding-left: 0;">
+                <!-- JS will populate this -->
+            </ul>
+        </div>
+
+        <!-- Rationale Section -->
+        <button id="toggleRationale" class="prompt-button" style="margin-top: 10px;">Show AI Rationale</button>
+        <div id="rationaleSection" style="display:none; margin-top: 10px; border-top: 1px solid #eee;">
+            <h4>AI Rationale for Parameters</h4>
+            <div id="rationaleDetails">
+                <h5>Cash Flow & Growth</h5>
+                <pre id="rationale-cashFlow"></pre>
+        
+                <h5>Net Debt</h5>
+                <pre id="rationale-netDebt"></pre>
+        
+                <h5>WACC</h5>
+                <pre id="rationale-wacc"></pre>
+        
+                <h5>Shares Outstanding</h5>
+                <pre id="rationale-shares"></pre>
+
+                <h5>Perpetual Growth</h5>
+                <pre id="rationale-perpGrowth"></pre>
+            </div>
         </div>
     </div>
 
@@ -50,16 +122,10 @@
         <div class="modal-content">
             <span class="close-button">&times;</span>
             <h4>Hybrid AI Setup (API Key)</h4>
-            <p>Enter your Gemini Cloud API key to enable the most powerful analysis models.</p>
+            <p>Enter your Gemini Cloud API key to enable the analysis models.</p>
             <input type="password" id="geminiApiKeyInput" placeholder="Enter Gemini Cloud API Key">
             <button id="saveApiKeyButton" class="prompt-button" style="background-color: #007bff; margin-top: 5px;">Save Key</button>
             <p id="keyStatus" style="font-size: 0.8em; margin-top: 5px;"></p>
-            <hr style="margin: 15px 0;">
-            <h4>Financial Data API Setup</h4>
-            <p>Enter your free <a href="https://site.financialmodelingprep.com/developer/docs" target="_blank">Financial Modeling Prep</a> API key for real-time data.</p>
-            <input type="password" id="fmpApiKeyInput" placeholder="Enter FMP API Key">
-            <button id="saveFmpApiKeyButton" class="prompt-button" style="background-color: #28a745; margin-top: 5px;">Save FMP Key</button>
-            <p id="fmpKeyStatus" style="font-size: 0.8em; margin-top: 5px;"></p>
         </div>
     </div>
 
