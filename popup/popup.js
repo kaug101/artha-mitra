@@ -87,13 +87,11 @@ function runTickerAnalysis(ticker) {
     });
 }
 
+
 // --- Populate UI with Gemini Data ---
 function populateDcfInputs(data) {
     const params = data.dcfParameters;
     
-    // Calculate TTM FCF from quarterly data
-    const ttmFcf = params.quarterlyFreeCashFlows.reduce((a, b) => a + b, 0);
-
     // Store latest price for later calculation
     document.getElementById('calculateButton').dataset.latestPrice = data.latestPrice;
 
@@ -101,13 +99,22 @@ function populateDcfInputs(data) {
     document.getElementById('stockHeader').textContent = `${data.ticker} - Current: $${data.latestPrice.toFixed(2)}`;
     document.getElementById('priceInfo').textContent = `As of: ${data.priceDate}`;
     
-    // Display quarterly FCF data
-    document.getElementById('quarterlyFcfDisplay').textContent = `(Quarters: ${params.quarterlyFreeCashFlows.join(', ')})`;
-
     // Populate input fields
-    document.getElementById('input-ttmFcf').value = ttmFcf.toFixed(2);
-    document.getElementById('input-fcfGrowth').value = params.cashFlowGrowthRate.toFixed(4);
-    document.getElementById('input-wacc').value = params.wacc.toFixed(4);
+    // UFCF Components
+    document.getElementById('input-ttmNopat').value = params.ttmNopat.toFixed(2);
+    document.getElementById('input-ttmDna').value = params.ttmDepreciationAndAmortization.toFixed(2);
+    document.getElementById('input-ttmCapex').value = params.ttmCapitalExpenditures.toFixed(2);
+    document.getElementById('input-ttmNwc').value = params.ttmChangeInNetWorkingCapital.toFixed(2);
+    document.getElementById('input-ufcfGrowth').value = params.ufcfGrowthRate.toFixed(4);
+
+    // WACC Components
+    document.getElementById('input-marketEquity').value = params.marketValueEquity.toFixed(2);
+    document.getElementById('input-marketDebt').value = params.marketValueDebt.toFixed(2);
+    document.getElementById('input-costEquity').value = params.costOfEquity.toFixed(4);
+    document.getElementById('input-costDebt').value = params.costOfDebt.toFixed(4);
+    document.getElementById('input-taxRate').value = params.corporateTaxRate.toFixed(4);
+
+    // Equity Value Components
     document.getElementById('input-netDebt').value = params.netDebt.toFixed(2);
     document.getElementById('input-shares').value = params.sharesOutstanding.toFixed(2);
     document.getElementById('input-perpGrowth').value = params.perpetualGrowthRate.toFixed(4);
@@ -119,49 +126,89 @@ function populateDcfInputs(data) {
 // --- Local DCF Calculation ---
 function calculateLocalDcf() {
     try {
-        // Read all values from input fields
-        const baseFcf = parseFloat(document.getElementById('input-ttmFcf').value);
-        const growthRate = parseFloat(document.getElementById('input-fcfGrowth').value);
-        const wacc = parseFloat(document.getElementById('input-wacc').value);
+        // === 1. Read all values from input fields ===
+        
+        // UFCF Components
+        const ttmNopat = parseFloat(document.getElementById('input-ttmNopat').value);
+        const ttmDna = parseFloat(document.getElementById('input-ttmDna').value);
+        const ttmCapex = parseFloat(document.getElementById('input-ttmCapex').value);
+        const ttmNwc = parseFloat(document.getElementById('input-ttmNwc').value);
+        const ufcfGrowth = parseFloat(document.getElementById('input-ufcfGrowth').value);
+
+        // WACC Components
+        const E = parseFloat(document.getElementById('input-marketEquity').value);
+        const D = parseFloat(document.getElementById('input-marketDebt').value);
+        const Re = parseFloat(document.getElementById('input-costEquity').value);
+        const Rd = parseFloat(document.getElementById('input-costDebt').value);
+        const t = parseFloat(document.getElementById('input-taxRate').value);
+
+        // Equity Value Components
         const netDebt = parseFloat(document.getElementById('input-netDebt').value);
         const shares = parseFloat(document.getElementById('input-shares').value);
         const perpGrowth = parseFloat(document.getElementById('input-perpGrowth').value);
         
         const latestPrice = parseFloat(document.getElementById('calculateButton').dataset.latestPrice);
 
-        if ([baseFcf, growthRate, wacc, netDebt, shares, perpGrowth, latestPrice].some(isNaN)) {
+        // Validate all inputs
+        const allInputs = [
+            ttmNopat, ttmDna, ttmCapex, ttmNwc, ufcfGrowth,
+            E, D, Re, Rd, t,
+            netDebt, shares, perpGrowth, latestPrice
+        ];
+
+        if (allInputs.some(isNaN)) {
             showNotification("All input fields must be valid numbers.", "error");
             return;
         }
 
+        // === 2. Calculate Base UFCF and WACC ===
+        
+        // UFCF = NOPAT + (D&A) - (CapEx) - (Change in NWC)
+        // Note: We assume user enters CapEx as a positive number, so we subtract it.
+        const baseUfcf = ttmNopat + ttmDna - ttmCapex - ttmNwc;
+        
+        // WACC = (E/(D+E) * Re) + (D/(D+E) * Rd * (1 - t))
+        const V = E + D;
+        const wacc = (E/V * Re) + (D/V * Rd * (1 - t));
+
         if (wacc <= perpGrowth) {
-            showNotification("WACC must be greater than Perpetual Growth Rate.", "error");
+            showNotification("Calculated WACC must be greater than Perpetual Growth Rate.", "error");
             return;
         }
 
-        // --- DCF Calculation Logic ---
+        // Display calculated WACC and Base UFCF
+        document.getElementById('baseUfcfValue').textContent = `$${baseUfcf.toFixed(2)}M`;
+        document.getElementById('waccValue').textContent = `${(wacc * 100).toFixed(2)}%`;
+
+
+        // === 3. Run DCF Calculation Logic ===
         const forecastPeriod = 5;
         let presentValuesSum = 0;
 
-        // 1. Calculate PV of forecasted cash flows
+        // 3a. Calculate PV of forecasted cash flows
         for (let i = 1; i <= forecastPeriod; i++) {
-            const futureFcf = baseFcf * Math.pow(1 + growthRate, i);
-            const pv = futureFcf / Math.pow(1 + wacc, i);
+            const futureUfcf = baseUfcf * Math.pow(1 + ufcfGrowth, i);
+            const pv = futureUfcf / Math.pow(1 + wacc, i);
             presentValuesSum += pv;
         }
 
-        // 2. Calculate Terminal Value
-        const terminalYearFcf = baseFcf * Math.pow(1 + growthRate, forecastPeriod + 1);
-        const terminalValue = (terminalYearFcf * (1 + perpGrowth)) / (wacc - perpGrowth);
+        // 3b. Calculate Terminal Value
+        
+        // UFCF for the *last* year of the forecast period (Year 5)
+        const lastYearUfcf = baseUfcf * Math.pow(1 + ufcfGrowth, forecastPeriod);
+        
+        // Terminal Value at Year 5, using the UFCF for Year 6
+        const terminalValue = (lastYearUfcf * (1 + perpGrowth)) / (wacc - perpGrowth);
 
-        // 3. Calculate PV of Terminal Value
+
+        // 3c. Calculate PV of Terminal Value
         const pvTerminalValue = terminalValue / Math.pow(1 + wacc, forecastPeriod);
 
-        // 4. Calculate Enterprise and Equity Value
+        // 3d. Calculate Enterprise and Equity Value
         const enterpriseValue = presentValuesSum + pvTerminalValue;
         const equityValue = enterpriseValue - netDebt;
         
-        // 5. Calculate Intrinsic Value Per Share
+        // 3e. Calculate Intrinsic Value Per Share
         const intrinsicValuePerShare = equityValue / shares;
 
         displayFinalResults(intrinsicValuePerShare, latestPrice);
@@ -196,12 +243,16 @@ function displayFinalResults(intrinsicValue, latestPrice) {
 
 // --- Handle Input Adjustments ---
 function adjustInputValue(field, op) {
+    // New field map for UFCF and WACC components
     const fieldMap = {
-        'fcfGrowth': { id: 'input-fcfGrowth', step: 0.005 },
-        'wacc': { id: 'input-wacc', step: 0.001 },
+        'ufcfGrowth': { id: 'input-ufcfGrowth', step: 0.005 },
+        'costEquity': { id: 'input-costEquity', step: 0.001 },
+        'costDebt': { id: 'input-costDebt', step: 0.001 },
+        'taxRate': { id: 'input-taxRate', step: 0.001 },
         'netDebt': { id: 'input-netDebt', step: 100 },
         'shares': { id: 'input-shares', step: 10 },
         'perpGrowth': { id: 'input-perpGrowth', step: 0.001 }
+        // Note: TTM/Market values are large and less likely to be "adjusted" with buttons
     };
 
     const config = fieldMap[field];
@@ -225,9 +276,9 @@ function adjustInputValue(field, op) {
 // --- Display AI Rationale ---
 function displayRationaleDetails(rationale) {
     if (!rationale) return;
-    document.getElementById('rationale-cashFlow').textContent = rationale.cashFlow || 'N/A';
+    document.getElementById('rationale-ufcf').textContent = rationale.ufcfComponents + "\n\n" + rationale.ufcfGrowthRate || 'N/A';
+    document.getElementById('rationale-wacc').textContent = rationale.waccComponents || 'N/A';
     document.getElementById('rationale-netDebt').textContent = rationale.netDebt || 'N/A';
-    document.getElementById('rationale-wacc').textContent = rationale.wacc || 'N/A';
     document.getElementById('rationale-shares').textContent = rationale.sharesOutstanding || 'N/A';
     document.getElementById('rationale-perpGrowth').textContent = rationale.perpetualGrowthRate || 'N/A';
 }

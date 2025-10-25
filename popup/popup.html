@@ -28,34 +28,83 @@
 
         <!-- DCF Input Parameters -->
         <div id="dcf-inputs">
-            <h4>DCF Parameters (Values in Millions USD)</h4>
             
+            <!-- UFCF Components -->
+            <h4 class="param-header">UFCF Components (TTM, in Millions)</h4>
             <div class="dcf-parameter">
-                <label>TTM Free Cash Flow</label>
+                <label>NOPAT</label>
                 <div class="input-group">
-                    <input type="number" id="input-ttmFcf" step="100">
-                </div>
-                <small id="quarterlyFcfDisplay" style="width: 100%; font-size: 0.8em; color: #555;"></small>
-            </div>
-
-            <div class="dcf-parameter">
-                <label>FCF Growth (5-Yr)</label>
-                <div class="input-group">
-                    <button class="adjust-btn" data-field="fcfGrowth" data-op="-">-</button>
-                    <input type="number" id="input-fcfGrowth" step="0.005">
-                    <button class="adjust-btn" data-field="fcfGrowth" data-op="+">+</button>
+                    <input type="number" id="input-ttmNopat" step="100">
                 </div>
             </div>
-
             <div class="dcf-parameter">
-                <label>WACC</label>
+                <label>+ D&A</label>
                 <div class="input-group">
-                    <button class="adjust-btn" data-field="wacc" data-op="-">-</button>
-                    <input type="number" id="input-wacc" step="0.001">
-                    <button class="adjust-btn" data-field="wacc" data-op="+">+</button>
+                    <input type="number" id="input-ttmDna" step="100">
+                </div>
+            </div>
+            <div class="dcf-parameter">
+                <label>- CapEx</label>
+                <div class="input-group">
+                    <input type="number" id="input-ttmCapex" step="100">
+                </div>
+            </div>
+            <div class="dcf-parameter">
+                <label>- &Delta; NWC</label>
+                <div class="input-group">
+                    <input type="number" id="input-ttmNwc" step="100">
+                </div>
+            </div>
+             <div class="dcf-parameter">
+                <label>UFCF Growth (5-Yr)</label>
+                <div class="input-group">
+                    <button class="adjust-btn" data-field="ufcfGrowth" data-op="-">-</button>
+                    <input type="number" id="input-ufcfGrowth" step="0.005">
+                    <button class="adjust-btn" data-field="ufcfGrowth" data-op="+">+</button>
                 </div>
             </div>
 
+            <!-- WACC Components -->
+            <h4 class="param-header">WACC Components (Values in Millions)</h4>
+            <div class="dcf-parameter">
+                <label>Market Val Equity (E)</label>
+                <div class="input-group">
+                    <input type="number" id="input-marketEquity" step="1000">
+                </div>
+            </div>
+            <div class="dcf-parameter">
+                <label>Market Val Debt (D)</label>
+                <div class="input-group">
+                    <input type="number" id="input-marketDebt" step="1000">
+                </div>
+            </div>
+            <div class="dcf-parameter">
+                <label>Cost of Equity (Re)</label>
+                <div class="input-group">
+                    <button class="adjust-btn" data-field="costEquity" data-op="-">-</button>
+                    <input type="number" id="input-costEquity" step="0.001">
+                    <button class="adjust-btn" data-field="costEquity" data-op="+">+</button>
+                </div>
+            </div>
+            <div class="dcf-parameter">
+                <label>Cost of Debt (Rd)</label>
+                <div class="input-group">
+                     <button class="adjust-btn" data-field="costDebt" data-op="-">-</button>
+                    <input type="number" id="input-costDebt" step="0.001">
+                     <button class="adjust-btn" data-field="costDebt" data-op="+">+</button>
+                </div>
+            </div>
+            <div class="dcf-parameter">
+                <label>Tax Rate (t)</label>
+                <div class="input-group">
+                    <button class="adjust-btn" data-field="taxRate" data-op="-">-</button>
+                    <input type="number" id="input-taxRate" step="0.001">
+                    <button class="adjust-btn" data-field="taxRate" data-op="+">+</button>
+                </div>
+            </div>
+
+            <!-- Equity Value Components -->
+            <h4 class="param-header">Equity Value Components (in Millions)</h4>
             <div class="dcf-parameter">
                 <label>Net Debt</label>
                 <div class="input-group">
@@ -64,7 +113,6 @@
                     <button class="adjust-btn" data-field="netDebt" data-op="+">+</button>
                 </div>
             </div>
-
              <div class="dcf-parameter">
                 <label>Shares Outstanding</label>
                 <div class="input-group">
@@ -73,9 +121,8 @@
                     <button class="adjust-btn" data-field="shares" data-op="+">+</button>
                 </div>
             </div>
-
             <div class="dcf-parameter">
-                <label>Perpetual Growth</label>
+                <label>Perpetual Growth (g)</label>
                 <div class="input-group">
                     <button class="adjust-btn" data-field="perpGrowth" data-op="-">-</button>
                     <input type="number" id="input-perpGrowth" step="0.001">
@@ -89,7 +136,10 @@
         <!-- Final Calculation Results -->
         <div id="final-results" style="display:none; margin-top: 15px; background-color: #fff; padding: 10px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
             <h3>Calculated Value: <span id="intrinsicValue" style="color: #007bff;"></span></h3>
-            <ul id="newEstimateTargets" style="list-style: none; padding-left: 0;">
+            <h4>Base UFCF: <span id="baseUfcfValue" style="color: #333; font-weight: 500;"></span></h4>
+            <h4>WACC: <span id="waccValue" style="color: #333; font-weight: 500;"></span></h4>
+            
+            <ul id="newEstimateTargets" style="list-style: none; padding-left: 0; margin-top: 10px;">
                 <!-- JS will populate this -->
             </ul>
         </div>
@@ -99,14 +149,14 @@
         <div id="rationaleSection" style="display:none; margin-top: 10px; border-top: 1px solid #eee;">
             <h4>AI Rationale for Parameters</h4>
             <div id="rationaleDetails">
-                <h5>Cash Flow & Growth</h5>
-                <pre id="rationale-cashFlow"></pre>
+                <h5>UFCF Components & Growth</h5>
+                <pre id="rationale-ufcf"></pre>
         
+                <h5>WACC Components</h5>
+                <pre id="rationale-wacc"></pre>
+
                 <h5>Net Debt</h5>
                 <pre id="rationale-netDebt"></pre>
-        
-                <h5>WACC</h5>
-                <pre id="rationale-wacc"></pre>
         
                 <h5>Shares Outstanding</h5>
                 <pre id="rationale-shares"></pre>

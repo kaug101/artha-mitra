@@ -3,6 +3,30 @@
 // --- 1. Global API Initialization ---
 const FMP_API_KEY_STORAGE_KEY = 'fmpCloudApiKey'; // Kept for any future fallback, but not used in primary logic.
 
+// --- 1.A. Open in Independent Window ---
+// Listen for the extension icon to be clicked
+chrome.action.onClicked.addListener((tab) => {
+    // Define window properties
+    const windowWidth = 400;
+    const windowHeight = 650;
+
+    // Try to get the current window to center the new window
+    chrome.windows.getLastFocused((lastWindow) => {
+        let top = (lastWindow.height - windowHeight) / 2 + lastWindow.top;
+        let left = (lastWindow.width - windowWidth) / 2 + lastWindow.left;
+
+        chrome.windows.create({
+            url: 'popup/popup.html',
+            type: 'popup', // 'popup' or 'panel' type creates a simple window
+            width: windowWidth,
+            height: windowHeight,
+            top: Math.round(top),
+            left: Math.round(left)
+        });
+    });
+});
+
+
 // --- 2. CORE MESSAGE LISTENER ---
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "runValuation") {
@@ -26,14 +50,13 @@ async function handleValuation(ticker) {
         return { error: "Gemini API Key not found. Please add it via the cloud icon in the popup." };
     }
 
-    // --- REVISED PROMPT ---
-    // This prompt now asks for DCF *parameters*, not the final calculation.
+    // --- REVISED PROMPT (Using full UFCF and WACC components) ---
     const userPrompt = `
-You are acting as a prudent, neutral financial analyst. Your task is to fetch the key parameters required for a Discounted Cash Flow (DCF) valuation for the company with ticker: "${ticker}".
+You are acting as a prudent, neutral financial analyst. Your task is to fetch the key parameters required for a detailed Discounted Cash Flow (DCF) valuation for the company with ticker: "${ticker}".
 You must use the most current, real-time data available from your search tools.
 Provide reasonable, base-case estimates for projected values.
-All monetary values (cash flows, net debt) should be in Millions of USD.
-All ratios/rates (wacc, growth rates) should be in decimal format (e.g., 8.5% = 0.085).
+All monetary values should be in Millions of USD.
+All ratios/rates (cost of equity, cost of debt, tax rate, growth rates) should be in decimal format (e.g., 8.5% = 0.085).
 Shares outstanding should be in Millions.
 
 Your entire response MUST be a single, validated JSON object. Do not include any text, markdown, or commentary before or after the JSON object.
@@ -44,32 +67,47 @@ The JSON object must follow this exact structure:
   "latestPrice": 0.0,
   "priceDate": "YYYY-MM-DD",
   "dcfParameters": {
-    "quarterlyFreeCashFlows": [0.0, 0.0, 0.0, 0.0],
+    "ttmNopat": 0.0,
+    "ttmDepreciationAndAmortization": 0.0,
+    "ttmCapitalExpenditures": 0.0,
+    "ttmChangeInNetWorkingCapital": 0.0,
+    "ufcfGrowthRate": 0.05,
+    "marketValueEquity": 0.0,
+    "marketValueDebt": 0.0,
+    "costOfEquity": 0.0,
+    "costOfDebt": 0.0,
+    "corporateTaxRate": 0.0,
     "netDebt": 0.0,
-    "wacc": 0.0,
     "sharesOutstanding": 0.0,
-    "perpetualGrowthRate": 0.025,
-    "cashFlowGrowthRate": 0.05
+    "perpetualGrowthRate": 0.025
   },
   "rationale": {
-    "cashFlow": "Rationale for the quarterly FCF values and the projected FCF growth rate...",
-    "netDebt": "Rationale for the Net Debt value...",
-    "wacc": "Rationale for the WACC (e.g., industry peers, company beta)...",
-    "sharesOutstanding": "Source and date for shares outstanding...",
-    "perpetualGrowthRate": "Rationale for the perpetual growth rate (e.g., long-term inflation/GDP)..."
+    "ufcfComponents": "Rationale for TTM NOPAT, D&A, CapEx, and Change in NWC. CapEx should be negative.",
+    "ufcfGrowthRate": "Rationale for the 5-year UFCF growth rate.",
+    "waccComponents": "Rationale for Market Value of Equity, Market Value of Debt, Cost of Equity (Re), Cost of Debt (Rd), and Corporate Tax Rate (t).",
+    "netDebt": "Rationale for the Net Debt value (Total Debt - Cash).",
+    "sharesOutstanding": "Source and date for shares outstanding.",
+    "perpetualGrowthRate": "Rationale for the perpetual growth rate (e.g., long-term inflation/GDP)."
   }
 }
 
 To populate the values, follow this methodology:
 1.  Fetch the "latestPrice" and "priceDate".
 2.  Populate "dcfParameters":
-    * "quarterlyFreeCashFlows": Find the Free Cash Flow for the last 4 reported quarters (T_Q-3, T_Q-2, T_Q-1, T_Q_Most_Recent).
-    * "netDebt": Find the most recent total Net Debt (Total Debt - Cash & Equivalents).
-    * "wacc": Estimate the Weighted Average Cost of Capital. Justify your choice.
-    * "sharesOutstanding": Find the latest shares outstanding.
+    * "ttmNopat": Trailing Twelve Months Net Operating Profit After Tax.
+    * "ttmDepreciationAndAmortization": TTM D&A.
+    * "ttmCapitalExpenditures": TTM CapEx (Note: This should be a positive number, e.g., 1000, not -1000, as the formula will subtract it).
+    * "ttmChangeInNetWorkingCapital": TTM Change in NWC.
+    * "ufcfGrowthRate": Estimate a reasonable 5-year UFCF growth rate.
+    * "marketValueEquity": Current Market Cap.
+    * "marketValueDebt": Most recent total Market Value of Debt.
+    * "costOfEquity": Estimated Cost of Equity (Re), e.g., from CAPM.
+    * "costOfDebt": Estimated pre-tax Cost of Debt (Rd).
+    * "corporateTaxRate": Effective corporate tax rate (t).
+    * "netDebt": Most recent total Net Debt (Total Debt - Cash & Equivalents).
+    * "sharesOutstanding": Latest shares outstanding.
     * "perpetualGrowthRate": Assume a reasonable terminal growth rate, typically between 2-3%.
-    * "cashFlowGrowthRate": Estimate a reasonable 5-year FCF growth rate based on historical performance and future outlook.
-3.  Populate "rationale": For each parameter, provide a brief (1-2 sentence) justification for the value you selected, citing sources if possible.
+3.  Populate "rationale": For each group of parameters, provide a brief (1-2 sentence) justification for the values.
 `;
 
     const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
@@ -113,8 +151,8 @@ To populate the values, follow this methodology:
             typeof result.latestPrice !== 'number' ||
             !result.dcfParameters ||
             !result.rationale ||
-            typeof result.dcfParameters.wacc !== 'number' ||
-            !Array.isArray(result.dcfParameters.quarterlyFreeCashFlows)
+            typeof result.dcfParameters.ttmNopat !== 'number' ||
+            typeof result.dcfParameters.costOfEquity !== 'number'
         ) {
             throw new Error("The parsed JSON does not match the expected DCF parameter structure.");
         }
