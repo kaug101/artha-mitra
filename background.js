@@ -50,7 +50,7 @@ async function handleValuation(ticker) {
         return { error: "Gemini API Key not found. Please add it via the cloud icon in the popup." };
     }
 
-    // --- REVISED PROMPT (Using full UFCF and WACC components) ---
+    // --- REVISED PROMPT (Added analystConsensus) ---
     const userPrompt = `
 You are acting as a prudent, neutral financial analyst. Your task is to fetch the key parameters required for a detailed Discounted Cash Flow (DCF) valuation for the company with ticker: "${ticker}".
 You must use the most current, real-time data available from your search tools.
@@ -81,13 +81,19 @@ The JSON object must follow this exact structure:
     "sharesOutstanding": 0.0,
     "perpetualGrowthRate": 0.025
   },
+  "analystConsensus": {
+    "target_3m": 0.0,
+    "target_6m": 0.0,
+    "target_12m": 0.0
+  },
   "rationale": {
-    "ufcfComponents": "Rationale for TTM NOPAT, D&A, CapEx, and Change in NWC. CapEx should be negative.",
+    "ufcfComponents": "Rationale for TTM NOPAT, D&A, CapEx, and Change in NWC. CapEx should be positive.",
     "ufcfGrowthRate": "Rationale for the 5-year UFCF growth rate.",
     "waccComponents": "Rationale for Market Value of Equity, Market Value of Debt, Cost of Equity (Re), Cost of Debt (Rd), and Corporate Tax Rate (t).",
     "netDebt": "Rationale for the Net Debt value (Total Debt - Cash).",
     "sharesOutstanding": "Source and date for shares outstanding.",
-    "perpetualGrowthRate": "Rationale for the perpetual growth rate (e.g., long-term inflation/GDP)."
+    "perpetualGrowthRate": "Rationale for the perpetual growth rate (e.g., long-term inflation/GDP).",
+    "analystConsensus": "Source and rationale for the 3, 6, and 12-month analyst consensus price targets."
   }
 }
 
@@ -107,7 +113,9 @@ To populate the values, follow this methodology:
     * "netDebt": Most recent total Net Debt (Total Debt - Cash & Equivalents).
     * "sharesOutstanding": Latest shares outstanding.
     * "perpetualGrowthRate": Assume a reasonable terminal growth rate, typically between 2-3%.
-3.  Populate "rationale": For each group of parameters, provide a brief (1-2 sentence) justification for the values.
+3.  Populate "analystConsensus":
+    * Fetch the 3-month, 6-month, and 12-month analyst consensus price targets.
+4.  Populate "rationale": For each group of parameters, provide a brief (1-2 sentence) justification for the values.
 `;
 
     const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
@@ -151,8 +159,10 @@ To populate the values, follow this methodology:
             typeof result.latestPrice !== 'number' ||
             !result.dcfParameters ||
             !result.rationale ||
+            !result.analystConsensus || // Check for new consensus object
             typeof result.dcfParameters.ttmNopat !== 'number' ||
-            typeof result.dcfParameters.costOfEquity !== 'number'
+            typeof result.dcfParameters.costOfEquity !== 'number' ||
+            typeof result.analystConsensus.target_12m !== 'number' // Check for new consensus field
         ) {
             throw new Error("The parsed JSON does not match the expected DCF parameter structure.");
         }

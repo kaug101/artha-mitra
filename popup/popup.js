@@ -62,7 +62,6 @@ function runTickerAnalysis(ticker) {
     document.getElementById('tickerInput').value = ticker;
     document.getElementById('dcf-container').style.display = 'none';
     document.getElementById('rationaleSection').style.display = 'none';
-    document.getElementById('toggleRationale').textContent = 'Show AI Rationale';
     document.getElementById('final-results').style.display = 'none';
     document.getElementById('loading').style.display = 'block';
     
@@ -79,8 +78,22 @@ function runTickerAnalysis(ticker) {
              showNotification(`Analysis Error: ${response.error}`, 'error');
         } else if (response && response.dcfParameters) {
             populateDcfInputs(response);
+            
+            // --- NEW LOGIC (Request 2) ---
+            // Automatically calculate intrinsic value
+            calculateLocalDcf(); 
+            
+            // Automatically display rationale
+            const rationaleData = response.rationale;
+            if (rationaleData && Object.keys(rationaleData).length > 0) {
+                displayRationaleDetails(rationaleData);
+                document.getElementById('rationaleSection').style.display = 'block';
+            }
+            // --- END NEW LOGIC ---
+
             document.getElementById('dcf-container').style.display = 'block';
-            showNotification('DCF Parameters loaded from Gemini.', 'success');
+            showNotification('DCF Parameters & Rationale loaded.', 'success'); // Updated message
+        
         } else {
             showNotification(`Could not find data for ${ticker}.`, 'error');
         }
@@ -92,8 +105,9 @@ function runTickerAnalysis(ticker) {
 function populateDcfInputs(data) {
     const params = data.dcfParameters;
     
-    // Store latest price for later calculation
-    document.getElementById('calculateButton').dataset.latestPrice = data.latestPrice;
+    // Store latest price and consensus data for later calculation/display
+    document.getElementById('final-results').dataset.latestPrice = data.latestPrice;
+    document.getElementById('final-results').dataset.analystConsensus = JSON.stringify(data.analystConsensus);
 
     // Set headers
     document.getElementById('stockHeader').textContent = `${data.ticker} - Current: $${data.latestPrice.toFixed(2)}`;
@@ -119,8 +133,7 @@ function populateDcfInputs(data) {
     document.getElementById('input-shares').value = params.sharesOutstanding.toFixed(2);
     document.getElementById('input-perpGrowth').value = params.perpetualGrowthRate.toFixed(4);
     
-    // Store rationale data in the toggle button
-    document.getElementById('toggleRationale').dataset.rationale = JSON.stringify(data.rationale);
+    // Rationale data is no longer stored in a button, it's displayed immediately
 }
 
 // --- Local DCF Calculation ---
@@ -147,7 +160,8 @@ function calculateLocalDcf() {
         const shares = parseFloat(document.getElementById('input-shares').value);
         const perpGrowth = parseFloat(document.getElementById('input-perpGrowth').value);
         
-        const latestPrice = parseFloat(document.getElementById('calculateButton').dataset.latestPrice);
+        // UPDATED: Get latestPrice from its new storage location
+        const latestPrice = parseFloat(document.getElementById('final-results').dataset.latestPrice);
 
         // Validate all inputs
         const allInputs = [
@@ -211,6 +225,7 @@ function calculateLocalDcf() {
         // 3e. Calculate Intrinsic Value Per Share
         const intrinsicValuePerShare = equityValue / shares;
 
+        // This function now handles both Intrinsic Value and Analyst Targets
         displayFinalResults(intrinsicValuePerShare, latestPrice);
     
     } catch (e) {
@@ -221,16 +236,18 @@ function calculateLocalDcf() {
 
 // --- Display Final Calculated Results ---
 function displayFinalResults(intrinsicValue, latestPrice) {
+    // Request 0: Display calculated intrinsic value
     document.getElementById('intrinsicValue').textContent = `$${intrinsicValue.toFixed(2)}`;
     
-    const estimatesList = document.getElementById('newEstimateTargets');
+    // Request 1: Display analyst consensus targets
+    const estimatesList = document.getElementById('analystEstimateTargets'); // UPDATED ID
     estimatesList.innerHTML = ''; // Clear previous
 
-    // Calculate progressive targets
-    const diff = intrinsicValue - latestPrice;
-    const target3m = latestPrice + (diff * 0.25);
-    const target6m = latestPrice + (diff * 0.5);
-    const target12m = intrinsicValue; // 12-month target is the full intrinsic value
+    const consensusData = JSON.parse(document.getElementById('final-results').dataset.analystConsensus || '{}');
+
+    const target3m = consensusData.target_3m || 0.0;
+    const target6m = consensusData.target_6m || 0.0;
+    const target12m = consensusData.target_12m || 0.0;
 
     estimatesList.innerHTML = `
         <li>3-Month Target: <b>$${target3m.toFixed(2)}</b></li>
@@ -281,6 +298,8 @@ function displayRationaleDetails(rationale) {
     document.getElementById('rationale-netDebt').textContent = rationale.netDebt || 'N/A';
     document.getElementById('rationale-shares').textContent = rationale.sharesOutstanding || 'N/A';
     document.getElementById('rationale-perpGrowth').textContent = rationale.perpetualGrowthRate || 'N/A';
+    // ADDED: Display rationale for analyst consensus
+    document.getElementById('rationale-analystConsensus').textContent = rationale.analystConsensus || 'N/A';
 }
 
 
@@ -299,8 +318,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.target == modal) modal.style.display = "none";
     });
 
-    // --- Single Stock Analysis Button Logic ---
-    document.getElementById('analyzeButton').addEventListener('click', () => {
+    // --- Single Stock Analysis Button Logic (UPDATED) ---
+    document.getElementById('runDcfValuationButton').addEventListener('click', () => {
         const ticker = document.getElementById('tickerInput').value.toUpperCase().trim();
         runTickerAnalysis(ticker);
     });
@@ -320,28 +339,8 @@ document.addEventListener('DOMContentLoaded', () => {
         loadApiKeyStatus();
     });
 
-    // --- Toggle Rationale Logic ---
-    document.getElementById('toggleRationale').addEventListener('click', (e) => {
-        const section = document.getElementById('rationaleSection');
-        const isVisible = section.style.display === 'block';
-        
-        if (isVisible) {
-            section.style.display = 'none';
-            e.target.textContent = 'Show AI Rationale';
-        } else {
-            const rationaleData = JSON.parse(e.target.dataset.rationale || '{}');
-            if (Object.keys(rationaleData).length > 0) {
-                displayRationaleDetails(rationaleData);
-                section.style.display = 'block';
-                e.target.textContent = 'Hide AI Rationale';
-            } else {
-                showNotification("Run an analysis first to see rationale.", "info");
-            }
-        }
-    });
-
-    // --- Local DCF Calculation Button ---
-    document.getElementById('calculateButton').addEventListener('click', calculateLocalDcf);
+    // --- REMOVED Toggle Rationale Logic ---
+    // --- REMOVED Local DCF Calculation Button Logic ---
 
     // --- Parameter Adjustment Buttons ---
     document.getElementById('dcf-inputs').addEventListener('click', (e) => {

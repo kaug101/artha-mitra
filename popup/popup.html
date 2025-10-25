@@ -15,10 +15,11 @@
 
     <!-- Ticker Input for single stock -->
     <input type="text" id="tickerInput" placeholder="Enter Single Ticker (e.g., AAPL)">
-    <button id="analyzeButton">Fetch DCF Parameters</button>
+    <!-- UPDATED: Single button for all actions -->
+    <button id="runDcfValuationButton">Run DCF Valuation</button>
 
     <div id="loading" style="display:none; color: orange;">
-        <p>Contacting Gemini for DCF Parameters...</p>
+        <p>Contacting Gemini for DCF Parameters & Rationale...</p>
     </div>
 
     <!-- This container holds the new DCF interface -->
@@ -131,21 +132,23 @@
             </div>
         </div>
 
-        <button id="calculateButton" class="prompt-button" style="background-color: #28a745; margin-top: 15px;">Calculate Intrinsic Value</button>
+        <!-- REMOVED Calculate Button -->
 
         <!-- Final Calculation Results -->
+        <!-- UPDATED: This section now shows Intrinsic Value AND Analyst Targets -->
         <div id="final-results" style="display:none; margin-top: 15px; background-color: #fff; padding: 10px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-            <h3>Calculated Value: <span id="intrinsicValue" style="color: #007bff;"></span></h3>
+            <h3>Calculated Intrinsic Value: <span id="intrinsicValue" style="color: #007bff;"></span></h3>
             <h4>Base UFCF: <span id="baseUfcfValue" style="color: #333; font-weight: 500;"></span></h4>
             <h4>WACC: <span id="waccValue" style="color: #333; font-weight: 500;"></span></h4>
             
-            <ul id="newEstimateTargets" style="list-style: none; padding-left: 0; margin-top: 10px;">
-                <!-- JS will populate this -->
+            <h3 style="margin-top: 15px;">Analyst Consensus Targets</h3>
+            <ul id="analystEstimateTargets" style="list-style: none; padding-left: 0; margin-top: 10px;">
+                <!-- JS will populate this with analyst data -->
             </ul>
         </div>
 
         <!-- Rationale Section -->
-        <button id="toggleRationale" class="prompt-button" style="margin-top: 10px;">Show AI Rationale</button>
+        <!-- REMOVED Toggle Button -->
         <div id="rationaleSection" style="display:none; margin-top: 10px; border-top: 1px solid #eee;">
             <h4>AI Rationale for Parameters</h4>
             <div id="rationaleDetails">
@@ -163,6 +166,10 @@
 
                 <h5>Perpetual Growth</h5>
                 <pre id="rationale-perpGrowth"></pre>
+
+                <!-- ADDED: Rationale for Analyst Consensus -->
+                <h5>Analyst Consensus</h5>
+                <pre id="rationale-analystConsensus"></pre>
             </div>
         </div>
     </div>
