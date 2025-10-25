@@ -1,6 +1,10 @@
 // popup.js
 
 const API_KEY_STORAGE_KEY = 'geminiCloudApiKey';
+const WATCHLIST_KEY = 'watchlistStocks'; // New key for watchlist
+
+// Stores data for the *currently* analyzed stock
+let currentStockData = null; 
 
 // --- Notification Bar Logic ---
 function showNotification(message, type = 'info') {
@@ -14,13 +18,14 @@ function showNotification(message, type = 'info') {
     
     if (type === 'error') notification.classList.add('notification-error');
     else if (type === 'success') notification.classList.add('notification-success');
-    else notification.classList.add('notification-info');
+    else if (type === 'info') notification.classList.add('notification-info'); // Use info for removals
+    else notification.classList.add('notification-info'); // Default
 
     notification.style.display = 'block';
 
     setTimeout(() => {
         notification.style.display = 'none';
-    }, 4000);
+    }, 3000); // Shortened to 3s
 }
 
 
@@ -59,6 +64,11 @@ function runTickerAnalysis(ticker) {
         return;
     }
 
+    // Reset current data and UI
+    currentStockData = null;
+    document.getElementById('favorite-heart').style.display = 'none';
+    document.getElementById('favorite-heart').classList.remove('favorited');
+
     document.getElementById('tickerInput').value = ticker;
     document.getElementById('dcf-container').style.display = 'none';
     document.getElementById('rationaleSection').style.display = 'none';
@@ -81,7 +91,7 @@ function runTickerAnalysis(ticker) {
             
             // --- NEW LOGIC (Request 2) ---
             // Automatically calculate intrinsic value
-            calculateLocalDcf(); 
+            calculateLocalDcf(response.ticker); // Pass ticker for watchlist check
             
             // Automatically display rationale
             const rationaleData = response.rationale;
@@ -113,6 +123,20 @@ function populateDcfInputs(data) {
     document.getElementById('stockHeader').textContent = `${data.ticker} - Current: $${data.latestPrice.toFixed(2)}`;
     document.getElementById('priceInfo').textContent = `As of: ${data.priceDate}`;
     
+    // --- NEW: Store data for watchlist ---
+    currentStockData = {
+        ticker: data.ticker,
+        currentPrice: data.latestPrice,
+        priceDate: data.priceDate,
+        analystConsensus: data.analystConsensus,
+        dcfValue: null, // Will be filled by calculateLocalDcf
+        lastUpdated: new Date().toISOString()
+    };
+    
+    // Set dataset for heart icon
+    const heart = document.getElementById('favorite-heart');
+    heart.dataset.ticker = data.ticker;
+
     // Populate input fields
     // UFCF Components
     document.getElementById('input-ttmNopat').value = params.ttmNopat.toFixed(2);
@@ -132,12 +156,10 @@ function populateDcfInputs(data) {
     document.getElementById('input-netDebt').value = params.netDebt.toFixed(2);
     document.getElementById('input-shares').value = params.sharesOutstanding.toFixed(2);
     document.getElementById('input-perpGrowth').value = params.perpetualGrowthRate.toFixed(4);
-    
-    // Rationale data is no longer stored in a button, it's displayed immediately
 }
 
 // --- Local DCF Calculation ---
-function calculateLocalDcf() {
+function calculateLocalDcf(ticker) {
     try {
         // === 1. Read all values from input fields ===
         
@@ -176,12 +198,7 @@ function calculateLocalDcf() {
         }
 
         // === 2. Calculate Base UFCF and WACC ===
-        
-        // UFCF = NOPAT + (D&A) - (CapEx) - (Change in NWC)
-        // Note: We assume user enters CapEx as a positive number, so we subtract it.
         const baseUfcf = ttmNopat + ttmDna - ttmCapex - ttmNwc;
-        
-        // WACC = (E/(D+E) * Re) + (D/(D+E) * Rd * (1 - t))
         const V = E + D;
         const wacc = (E/V * Re) + (D/V * Rd * (1 - t));
 
@@ -190,43 +207,33 @@ function calculateLocalDcf() {
             return;
         }
 
-        // Display calculated WACC and Base UFCF
         document.getElementById('baseUfcfValue').textContent = `$${baseUfcf.toFixed(2)}M`;
         document.getElementById('waccValue').textContent = `${(wacc * 100).toFixed(2)}%`;
-
 
         // === 3. Run DCF Calculation Logic ===
         const forecastPeriod = 5;
         let presentValuesSum = 0;
-
-        // 3a. Calculate PV of forecasted cash flows
         for (let i = 1; i <= forecastPeriod; i++) {
             const futureUfcf = baseUfcf * Math.pow(1 + ufcfGrowth, i);
             const pv = futureUfcf / Math.pow(1 + wacc, i);
             presentValuesSum += pv;
         }
-
-        // 3b. Calculate Terminal Value
-        
-        // UFCF for the *last* year of the forecast period (Year 5)
         const lastYearUfcf = baseUfcf * Math.pow(1 + ufcfGrowth, forecastPeriod);
-        
-        // Terminal Value at Year 5, using the UFCF for Year 6
         const terminalValue = (lastYearUfcf * (1 + perpGrowth)) / (wacc - perpGrowth);
-
-
-        // 3c. Calculate PV of Terminal Value
         const pvTerminalValue = terminalValue / Math.pow(1 + wacc, forecastPeriod);
-
-        // 3d. Calculate Enterprise and Equity Value
         const enterpriseValue = presentValuesSum + pvTerminalValue;
         const equityValue = enterpriseValue - netDebt;
-        
-        // 3e. Calculate Intrinsic Value Per Share
         const intrinsicValuePerShare = equityValue / shares;
 
         // This function now handles both Intrinsic Value and Analyst Targets
         displayFinalResults(intrinsicValuePerShare, latestPrice);
+        
+        // --- NEW: Update currentStockData and show heart ---
+        if (currentStockData) {
+            currentStockData.dcfValue = intrinsicValuePerShare;
+        }
+        checkWatchlistStatus(ticker); // Check and set heart state
+        document.getElementById('favorite-heart').style.display = 'block';
     
     } catch (e) {
         console.error("DCF Calculation Error:", e);
@@ -236,11 +243,9 @@ function calculateLocalDcf() {
 
 // --- Display Final Calculated Results ---
 function displayFinalResults(intrinsicValue, latestPrice) {
-    // Request 0: Display calculated intrinsic value
     document.getElementById('intrinsicValue').textContent = `$${intrinsicValue.toFixed(2)}`;
     
-    // Request 1: Display analyst consensus targets
-    const estimatesList = document.getElementById('analystEstimateTargets'); // UPDATED ID
+    const estimatesList = document.getElementById('analystEstimateTargets');
     estimatesList.innerHTML = ''; // Clear previous
 
     const consensusData = JSON.parse(document.getElementById('final-results').dataset.analystConsensus || '{}');
@@ -260,7 +265,6 @@ function displayFinalResults(intrinsicValue, latestPrice) {
 
 // --- Handle Input Adjustments ---
 function adjustInputValue(field, op) {
-    // New field map for UFCF and WACC components
     const fieldMap = {
         'ufcfGrowth': { id: 'input-ufcfGrowth', step: 0.005 },
         'costEquity': { id: 'input-costEquity', step: 0.001 },
@@ -269,7 +273,6 @@ function adjustInputValue(field, op) {
         'netDebt': { id: 'input-netDebt', step: 100 },
         'shares': { id: 'input-shares', step: 10 },
         'perpGrowth': { id: 'input-perpGrowth', step: 0.001 }
-        // Note: TTM/Market values are large and less likely to be "adjusted" with buttons
     };
 
     const config = fieldMap[field];
@@ -285,7 +288,6 @@ function adjustInputValue(field, op) {
         value -= step;
     }
 
-    // Fix precision issues
     let decimals = (step.toString().split('.')[1] || []).length;
     input.value = value.toFixed(decimals);
 }
@@ -298,8 +300,198 @@ function displayRationaleDetails(rationale) {
     document.getElementById('rationale-netDebt').textContent = rationale.netDebt || 'N/A';
     document.getElementById('rationale-shares').textContent = rationale.sharesOutstanding || 'N/A';
     document.getElementById('rationale-perpGrowth').textContent = rationale.perpetualGrowthRate || 'N/A';
-    // ADDED: Display rationale for analyst consensus
     document.getElementById('rationale-analystConsensus').textContent = rationale.analystConsensus || 'N/A';
+}
+
+// --- NEW: View Navigation ---
+function handleNavClick(view) {
+    const analysisView = document.getElementById('analysis-view');
+    const watchlistView = document.getElementById('watchlist-view');
+    const navAnalysis = document.getElementById('nav-analysis');
+    const navWatchlist = document.getElementById('nav-watchlist');
+
+    if (view === 'watchlist') {
+        analysisView.style.display = 'none';
+        watchlistView.style.display = 'block';
+        navAnalysis.classList.remove('active');
+        navWatchlist.classList.add('active');
+        loadWatchlist(); // Refresh watchlist every time it's viewed
+    } else { // 'analysis'
+        analysisView.style.display = 'block';
+        watchlistView.style.display = 'none';
+        navAnalysis.classList.add('active');
+        navWatchlist.classList.remove('active');
+    }
+}
+
+// --- NEW: Load and Display Watchlist ---
+async function loadWatchlist() {
+    const content = document.getElementById('watchlist-content');
+    content.innerHTML = '<p>Loading watchlist...</p>';
+
+    try {
+        const result = await chrome.storage.local.get(WATCHLIST_KEY);
+        let watchlist = result[WATCHLIST_KEY] || [];
+
+        if (watchlist.length === 0) {
+            content.innerHTML = '<p>Your watchlist is empty. Analyze a stock and click the heart icon to add it.</p>';
+            return;
+        }
+
+        // Calculate upside and sort
+        watchlist.forEach(item => {
+            const price = item.currentPrice || 0.01; // Avoid division by zero
+            const target12m = item.analystConsensus?.target_12m || 0;
+            item.upside = (target12m / price) - 1;
+        });
+
+        watchlist.sort((a, b) => b.upside - a.upside); // Sort by highest upside
+
+        // Build HTML table
+        let tableHtml = `
+            <table class="watchlist-table">
+                <thead>
+                    <tr>
+                        <th>Ticker</th>
+                        <th>Price</th>
+                        <th>DCF</th>
+                        <th>12m Tgt</th>
+                        <th>12m Upside</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        for (const item of watchlist) {
+            const upsideClass = item.upside >= 0 ? 'watchlist-upside' : 'watchlist-downside';
+            const updatedDate = new Date(item.lastUpdated).toLocaleDateString();
+
+            tableHtml += `
+                <tr>
+                    <td>
+                        <b>${item.ticker}</b>
+                        <span class="watchlist-date">${updatedDate}</span>
+                    </td>
+                    <td>$${item.currentPrice.toFixed(2)}</td>
+                    <td>$${item.dcfValue.toFixed(2)}</td>
+                    <td>$${item.analystConsensus.target_12m.toFixed(2)}</td>
+                    <td>
+                        <b class="${upsideClass}">${(item.upside * 100).toFixed(1)}%</b>
+                    </td>
+                    <td>
+                        <span class="watchlist-remove" data-ticker="${item.ticker}">&times;</span>
+                    </td>
+                </tr>
+            `;
+        }
+
+        tableHtml += '</tbody></table>';
+        content.innerHTML = tableHtml;
+
+        // Add event listeners to remove buttons
+        document.querySelectorAll('.watchlist-remove').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const tickerToRemove = e.target.dataset.ticker;
+                removeWatchlistItem(tickerToRemove);
+            });
+        });
+
+    } catch (e) {
+        console.error("Error loading watchlist:", e);
+        content.innerHTML = '<p>Error loading watchlist.</p>';
+        showNotification('Could not load watchlist.', 'error');
+    }
+}
+
+// --- NEW: Remove Item from Watchlist ---
+async function removeWatchlistItem(ticker) {
+    if (!ticker) return;
+    try {
+        const result = await chrome.storage.local.get(WATCHLIST_KEY);
+        let watchlist = result[WATCHLIST_KEY] || [];
+        
+        const updatedWatchlist = watchlist.filter(item => item.ticker !== ticker);
+        
+        await chrome.storage.local.set({ [WATCHLIST_KEY]: updatedWatchlist });
+        showNotification(`${ticker} removed from watchlist.`, 'info');
+        loadWatchlist(); // Refresh the view
+        
+        // If the removed item is the one currently being viewed, update the heart
+        if (currentStockData && currentStockData.ticker === ticker) {
+            document.getElementById('favorite-heart').classList.remove('favorited');
+        }
+
+    } catch (e) {
+        console.error("Error removing watchlist item:", e);
+        showNotification('Error removing item.', 'error');
+    }
+}
+
+
+// --- NEW: Check Watchlist Status for Current Ticker ---
+async function checkWatchlistStatus(ticker) {
+    if (!ticker) return;
+    try {
+        const result = await chrome.storage.local.get(WATCHLIST_KEY);
+        const watchlist = result[WATCHLIST_KEY] || [];
+        const isFavorited = watchlist.some(item => item.ticker === ticker);
+        
+        const heart = document.getElementById('favorite-heart');
+        if (isFavorited) {
+            heart.classList.add('favorited');
+        } else {
+            heart.classList.remove('favorited');
+        }
+    } catch (e) {
+        console.error("Error checking watchlist status:", e);
+    }
+}
+
+// --- NEW: Handle Favorite (Heart) Click ---
+async function handleFavoriteClick() {
+    const heart = document.getElementById('favorite-heart');
+    const ticker = heart.dataset.ticker;
+    
+    if (!ticker || !currentStockData || currentStockData.ticker !== ticker) {
+        showNotification('Cannot add to watchlist, data is missing.', 'error');
+        return;
+    }
+    
+    // Ensure DCF value is calculated
+    if (currentStockData.dcfValue === null) {
+        showNotification('Please wait for DCF calculation to finish.', 'warning');
+        return;
+    }
+
+    try {
+        const result = await chrome.storage.local.get(WATCHLIST_KEY);
+        let watchlist = result[WATCHLIST_KEY] || [];
+        
+        const isFavorited = watchlist.some(item => item.ticker === ticker);
+
+        if (isFavorited) {
+            // Remove it
+            const updatedWatchlist = watchlist.filter(item => item.ticker !== ticker);
+            await chrome.storage.local.set({ [WATCHLIST_KEY]: updatedWatchlist });
+            heart.classList.remove('favorited');
+            showNotification(`${ticker} removed from watchlist.`, 'info');
+        } else {
+            // Add it
+            // Update timestamp before saving
+            currentStockData.lastUpdated = new Date().toISOString();
+            // Remove old entry if it exists (e.g., from a partial add)
+            const filteredWatchlist = watchlist.filter(item => item.ticker !== ticker);
+            filteredWatchlist.push(currentStockData);
+            
+            await chrome.storage.local.set({ [WATCHLIST_KEY]: filteredWatchlist });
+            heart.classList.add('favorited');
+            showNotification(`${ticker} added to watchlist!`, 'success');
+        }
+    } catch (e) {
+        console.error("Error saving to watchlist:", e);
+        showNotification('Error updating watchlist.', 'error');
+    }
 }
 
 
@@ -339,9 +531,6 @@ document.addEventListener('DOMContentLoaded', () => {
         loadApiKeyStatus();
     });
 
-    // --- REMOVED Toggle Rationale Logic ---
-    // --- REMOVED Local DCF Calculation Button Logic ---
-
     // --- Parameter Adjustment Buttons ---
     document.getElementById('dcf-inputs').addEventListener('click', (e) => {
         if (e.target.classList.contains('adjust-btn')) {
@@ -350,4 +539,11 @@ document.addEventListener('DOMContentLoaded', () => {
             adjustInputValue(field, op);
         }
     });
+    
+    // --- NEW: View Navigation Listeners ---
+    document.getElementById('nav-analysis').addEventListener('click', () => handleNavClick('analysis'));
+    document.getElementById('nav-watchlist').addEventListener('click', () => handleNavClick('watchlist'));
+
+    // --- NEW: Heart Icon Listener ---
+    document.getElementById('favorite-heart').addEventListener('click', handleFavoriteClick);
 });

@@ -7,170 +7,193 @@
 <body>
     <div id="notification" class="notification-bar" style="display:none;"></div>
 
+    <!-- NEW: View Navigation -->
+    <div class="view-nav">
+        <button id="nav-analysis" class="nav-btn active">Analysis</button>
+        <button id="nav-watchlist" class="nav-btn">Watchlist</button>
+    </div>
+
     <!-- Header with Cloud Icon -->
     <div class="header-container">
         <h1>Artha-Mitra</h1>
         <svg id="cloudKeyIcon" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
     </div>
 
-    <!-- Ticker Input for single stock -->
-    <input type="text" id="tickerInput" placeholder="Enter Single Ticker (e.g., AAPL)">
-    <!-- UPDATED: Single button for all actions -->
-    <button id="runDcfValuationButton">Run DCF Valuation</button>
+    <!-- NEW: Analysis View Wrapper -->
+    <div id="analysis-view">
+        <!-- Ticker Input for single stock -->
+        <input type="text" id="tickerInput" placeholder="Enter Single Ticker (e.g., AAPL)">
+        <!-- UPDATED: Single button for all actions -->
+        <button id="runDcfValuationButton">Run DCF Valuation</button>
 
-    <div id="loading" style="display:none; color: orange;">
-        <p>Contacting Gemini for DCF Parameters & Rationale...</p>
-    </div>
+        <div id="loading" style="display:none; color: orange;">
+            <p>Contacting Gemini for DCF Parameters & Rationale...</p>
+        </div>
 
-    <!-- This container holds the new DCF interface -->
-    <div id="dcf-container" style="display:none;">
-        <h2 id="stockHeader" style="margin-bottom: 0;"></h2>
-        <p id="priceInfo" style="margin-top: 2px; font-size: 0.9em;"></p>
-
-        <!-- DCF Input Parameters -->
-        <div id="dcf-inputs">
+        <!-- This container holds the new DCF interface -->
+        <div id="dcf-container" style="display:none;">
             
-            <!-- UFCF Components -->
-            <h4 class="param-header">UFCF Components (TTM, in Millions)</h4>
-            <div class="dcf-parameter">
-                <label>NOPAT</label>
-                <div class="input-group">
-                    <input type="number" id="input-ttmNopat" step="100">
+            <!-- UPDATED: Header with Heart Icon -->
+            <div class="stock-header-wrapper">
+                <div>
+                    <h2 id="stockHeader" style="margin-bottom: 0;"></h2>
+                    <p id="priceInfo" style="margin-top: 2px; font-size: 0.9em;"></p>
                 </div>
+                <!-- NEW: Heart Icon -->
+                <svg id="favorite-heart" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="heart-icon" style="display:none;">
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                </svg>
             </div>
-            <div class="dcf-parameter">
-                <label>+ D&A</label>
-                <div class="input-group">
-                    <input type="number" id="input-ttmDna" step="100">
+
+            <!-- DCF Input Parameters -->
+            <div id="dcf-inputs">
+                
+                <!-- UFCF Components -->
+                <h4 class="param-header">UFCF Components (TTM, in Millions)</h4>
+                <div class="dcf-parameter">
+                    <label>NOPAT</label>
+                    <div class="input-group">
+                        <input type="number" id="input-ttmNopat" step="100">
+                    </div>
                 </div>
-            </div>
-            <div class="dcf-parameter">
-                <label>- CapEx</label>
-                <div class="input-group">
-                    <input type="number" id="input-ttmCapex" step="100">
+                <div class="dcf-parameter">
+                    <label>+ D&A</label>
+                    <div class="input-group">
+                        <input type="number" id="input-ttmDna" step="100">
+                    </div>
                 </div>
-            </div>
-            <div class="dcf-parameter">
-                <label>- &Delta; NWC</label>
-                <div class="input-group">
-                    <input type="number" id="input-ttmNwc" step="100">
+                <div class="dcf-parameter">
+                    <label>- CapEx</label>
+                    <div class="input-group">
+                        <input type="number" id="input-ttmCapex" step="100">
+                    </div>
                 </div>
-            </div>
-             <div class="dcf-parameter">
-                <label>UFCF Growth (5-Yr)</label>
-                <div class="input-group">
-                    <button class="adjust-btn" data-field="ufcfGrowth" data-op="-">-</button>
-                    <input type="number" id="input-ufcfGrowth" step="0.005">
-                    <button class="adjust-btn" data-field="ufcfGrowth" data-op="+">+</button>
+                <div class="dcf-parameter">
+                    <label>- &Delta; NWC</label>
+                    <div class="input-group">
+                        <input type="number" id="input-ttmNwc" step="100">
+                    </div>
+                </div>
+                 <div class="dcf-parameter">
+                    <label>UFCF Growth (5-Yr)</label>
+                    <div class="input-group">
+                        <button class="adjust-btn" data-field="ufcfGrowth" data-op="-">-</button>
+                        <input type="number" id="input-ufcfGrowth" step="0.005">
+                        <button class="adjust-btn" data-field="ufcfGrowth" data-op="+">+</button>
+                    </div>
+                </div>
+
+                <!-- WACC Components -->
+                <h4 class="param-header">WACC Components (Values in Millions)</h4>
+                <div class="dcf-parameter">
+                    <label>Market Val Equity (E)</label>
+                    <div class="input-group">
+                        <input type="number" id="input-marketEquity" step="1000">
+                    </div>
+                </div>
+                <div class="dcf-parameter">
+                    <label>Market Val Debt (D)</label>
+                    <div class="input-group">
+                        <input type="number" id="input-marketDebt" step="1000">
+                    </div>
+                </div>
+                <div class="dcf-parameter">
+                    <label>Cost of Equity (Re)</label>
+                    <div class="input-group">
+                        <button class="adjust-btn" data-field="costEquity" data-op="-">-</button>
+                        <input type="number" id="input-costEquity" step="0.001">
+                        <button class="adjust-btn" data-field="costEquity" data-op="+">+</button>
+                    </div>
+                </div>
+                <div class="dcf-parameter">
+                    <label>Cost of Debt (Rd)</label>
+                    <div class="input-group">
+                         <button class="adjust-btn" data-field="costDebt" data-op="-">-</button>
+                        <input type="number" id="input-costDebt" step="0.001">
+                         <button class="adjust-btn" data-field="costDebt" data-op="+">+</button>
+                    </div>
+                </div>
+                <div class="dcf-parameter">
+                    <label>Tax Rate (t)</label>
+                    <div class="input-group">
+                        <button class="adjust-btn" data-field="taxRate" data-op="-">-</button>
+                        <input type="number" id="input-taxRate" step="0.001">
+                        <button class="adjust-btn" data-field="taxRate" data-op="+">+</button>
+                    </div>
+                </div>
+
+                <!-- Equity Value Components -->
+                <h4 class="param-header">Equity Value Components (in Millions)</h4>
+                <div class="dcf-parameter">
+                    <label>Net Debt</label>
+                    <div class="input-group">
+                        <button class="adjust-btn" data-field="netDebt" data-op="-">-</button>
+                        <input type="number" id="input-netDebt" step="100">
+                        <button class="adjust-btn" data-field="netDebt" data-op="+">+</button>
+                    </div>
+                </div>
+                 <div class="dcf-parameter">
+                    <label>Shares Outstanding</label>
+                    <div class="input-group">
+                        <button class="adjust-btn" data-field="shares" data-op="-">-</button>
+                        <input type="number" id="input-shares" step="10">
+                        <button class="adjust-btn" data-field="shares" data-op="+">+</button>
+                    </div>
+                </div>
+                <div class="dcf-parameter">
+                    <label>Perpetual Growth (g)</label>
+                    <div class="input-group">
+                        <button class="adjust-btn" data-field="perpGrowth" data-op="-">-</button>
+                        <input type="number" id="input-perpGrowth" step="0.001">
+                        <button class="adjust-btn" data-field="perpGrowth" data-op="+">+</button>
+                    </div>
                 </div>
             </div>
 
-            <!-- WACC Components -->
-            <h4 class="param-header">WACC Components (Values in Millions)</h4>
-            <div class="dcf-parameter">
-                <label>Market Val Equity (E)</label>
-                <div class="input-group">
-                    <input type="number" id="input-marketEquity" step="1000">
-                </div>
-            </div>
-            <div class="dcf-parameter">
-                <label>Market Val Debt (D)</label>
-                <div class="input-group">
-                    <input type="number" id="input-marketDebt" step="1000">
-                </div>
-            </div>
-            <div class="dcf-parameter">
-                <label>Cost of Equity (Re)</label>
-                <div class="input-group">
-                    <button class="adjust-btn" data-field="costEquity" data-op="-">-</button>
-                    <input type="number" id="input-costEquity" step="0.001">
-                    <button class="adjust-btn" data-field="costEquity" data-op="+">+</button>
-                </div>
-            </div>
-            <div class="dcf-parameter">
-                <label>Cost of Debt (Rd)</label>
-                <div class="input-group">
-                     <button class="adjust-btn" data-field="costDebt" data-op="-">-</button>
-                    <input type="number" id="input-costDebt" step="0.001">
-                     <button class="adjust-btn" data-field="costDebt" data-op="+">+</button>
-                </div>
-            </div>
-            <div class="dcf-parameter">
-                <label>Tax Rate (t)</label>
-                <div class="input-group">
-                    <button class="adjust-btn" data-field="taxRate" data-op="-">-</button>
-                    <input type="number" id="input-taxRate" step="0.001">
-                    <button class="adjust-btn" data-field="taxRate" data-op="+">+</button>
-                </div>
+            <!-- Final Calculation Results -->
+            <div id="final-results" style="display:none; margin-top: 15px; background-color: #fff; padding: 10px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                <h3>Calculated Intrinsic Value: <span id="intrinsicValue" style="color: #007bff;"></span></h3>
+                <h4>Base UFCF: <span id="baseUfcfValue" style="color: #333; font-weight: 500;"></span></h4>
+                <h4>WACC: <span id="waccValue" style="color: #333; font-weight: 500;"></span></h4>
+                
+                <h3 style="margin-top: 15px;">Analyst Consensus Targets</h3>
+                <ul id="analystEstimateTargets" style="list-style: none; padding-left: 0; margin-top: 10px;">
+                    <!-- JS will populate this with analyst data -->
+                </ul>
             </div>
 
-            <!-- Equity Value Components -->
-            <h4 class="param-header">Equity Value Components (in Millions)</h4>
-            <div class="dcf-parameter">
-                <label>Net Debt</label>
-                <div class="input-group">
-                    <button class="adjust-btn" data-field="netDebt" data-op="-">-</button>
-                    <input type="number" id="input-netDebt" step="100">
-                    <button class="adjust-btn" data-field="netDebt" data-op="+">+</button>
-                </div>
-            </div>
-             <div class="dcf-parameter">
-                <label>Shares Outstanding</label>
-                <div class="input-group">
-                    <button class="adjust-btn" data-field="shares" data-op="-">-</button>
-                    <input type="number" id="input-shares" step="10">
-                    <button class="adjust-btn" data-field="shares" data-op="+">+</button>
-                </div>
-            </div>
-            <div class="dcf-parameter">
-                <label>Perpetual Growth (g)</label>
-                <div class="input-group">
-                    <button class="adjust-btn" data-field="perpGrowth" data-op="-">-</button>
-                    <input type="number" id="input-perpGrowth" step="0.001">
-                    <button class="adjust-btn" data-field="perpGrowth" data-op="+">+</button>
+            <!-- Rationale Section -->
+            <div id="rationaleSection" style="display:none; margin-top: 10px; border-top: 1px solid #eee;">
+                <h4>AI Rationale for Parameters</h4>
+                <div id="rationaleDetails">
+                    <h5>UFCF Components & Growth</h5>
+                    <pre id="rationale-ufcf"></pre>
+            
+                    <h5>WACC Components</h5>
+                    <pre id="rationale-wacc"></pre>
+
+                    <h5>Net Debt</h5>
+                    <pre id="rationale-netDebt"></pre>
+            
+                    <h5>Shares Outstanding</h5>
+                    <pre id="rationale-shares"></pre>
+
+                    <h5>Perpetual Growth</h5>
+                    <pre id="rationale-perpGrowth"></pre>
+
+                    <!-- ADDED: Rationale for Analyst Consensus -->
+                    <h5>Analyst Consensus</h5>
+                    <pre id="rationale-analystConsensus"></pre>
                 </div>
             </div>
         </div>
+    </div> <!-- End of analysis-view -->
 
-        <!-- REMOVED Calculate Button -->
-
-        <!-- Final Calculation Results -->
-        <!-- UPDATED: This section now shows Intrinsic Value AND Analyst Targets -->
-        <div id="final-results" style="display:none; margin-top: 15px; background-color: #fff; padding: 10px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-            <h3>Calculated Intrinsic Value: <span id="intrinsicValue" style="color: #007bff;"></span></h3>
-            <h4>Base UFCF: <span id="baseUfcfValue" style="color: #333; font-weight: 500;"></span></h4>
-            <h4>WACC: <span id="waccValue" style="color: #333; font-weight: 500;"></span></h4>
-            
-            <h3 style="margin-top: 15px;">Analyst Consensus Targets</h3>
-            <ul id="analystEstimateTargets" style="list-style: none; padding-left: 0; margin-top: 10px;">
-                <!-- JS will populate this with analyst data -->
-            </ul>
-        </div>
-
-        <!-- Rationale Section -->
-        <!-- REMOVED Toggle Button -->
-        <div id="rationaleSection" style="display:none; margin-top: 10px; border-top: 1px solid #eee;">
-            <h4>AI Rationale for Parameters</h4>
-            <div id="rationaleDetails">
-                <h5>UFCF Components & Growth</h5>
-                <pre id="rationale-ufcf"></pre>
-        
-                <h5>WACC Components</h5>
-                <pre id="rationale-wacc"></pre>
-
-                <h5>Net Debt</h5>
-                <pre id="rationale-netDebt"></pre>
-        
-                <h5>Shares Outstanding</h5>
-                <pre id="rationale-shares"></pre>
-
-                <h5>Perpetual Growth</h5>
-                <pre id="rationale-perpGrowth"></pre>
-
-                <!-- ADDED: Rationale for Analyst Consensus -->
-                <h5>Analyst Consensus</h5>
-                <pre id="rationale-analystConsensus"></pre>
-            </div>
+    <!-- NEW: Watchlist View -->
+    <div id="watchlist-view" style="display:none;">
+        <h2>My Watchlist</h2>
+        <div id="watchlist-content">
+            <!-- Watchlist items will be populated here by JS -->
         </div>
     </div>
 

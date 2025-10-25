@@ -36,6 +36,35 @@ body {
     background-color: #17a2b8; /* Blue for info */
 }
 
+/* --- View Navigation --- */
+.view-nav {
+    display: flex;
+    justify-content: flex-start;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #ccc;
+}
+
+.nav-btn {
+    padding: 8px 16px;
+    cursor: pointer;
+    background-color: transparent;
+    border: none;
+    font-size: 1em;
+    color: #555;
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s;
+}
+
+.nav-btn:hover {
+    color: #007bff;
+}
+
+.nav-btn.active {
+    color: #007bff;
+    font-weight: bold;
+    border-bottom: 3px solid #007bff;
+}
+
 
 .header-container {
     display: flex;
@@ -60,6 +89,30 @@ h2, h3, h4 {
     margin-top: 15px;
 }
 
+/* --- Stock Header Wrapper (for Heart) --- */
+.stock-header-wrapper {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px; /* Add some space below header */
+}
+
+.heart-icon {
+    cursor: pointer;
+    transition: all 0.2s;
+    stroke: #aaa;
+}
+
+.heart-icon:hover {
+    stroke: #dc3545; /* Red on hover */
+}
+
+.heart-icon.favorited {
+    fill: #dc3545;
+    stroke: #dc3545;
+}
+
+
 #tickerInput {
     width: calc(100% - 22px); /* Adjusted for padding */
     padding: 10px;
@@ -69,7 +122,7 @@ h2, h3, h4 {
     box-sizing: border-box;
 }
 
-#analyzeButton {
+#runDcfValuationButton {
     width: 100%;
     padding: 10px;
     background-color: #007bff; /* Changed to blue */
@@ -82,11 +135,11 @@ h2, h3, h4 {
     transition: background-color 0.2s;
 }
 
-#analyzeButton:hover:not(:disabled) {
+#runDcfValuationButton:hover:not(:disabled) {
     background-color: #0056b3;
 }
 
-#analyzeButton:disabled {
+#runDcfValuationButton:disabled {
     background-color: #a0c7e8;
     cursor: not-allowed;
 }
@@ -209,6 +262,73 @@ h2, h3, h4 {
     border-left: 3px solid #007bff; /* Highlights AI-generated text */
     margin-top: 5px;
 }
+
+/* --- Watchlist View --- */
+#watchlist-view h2 {
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 5px;
+}
+
+#watchlist-content {
+    max-height: 450px; /* Allow scrolling if list is long */
+    overflow-y: auto;
+}
+
+.watchlist-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85em; /* Slightly smaller font for more data */
+}
+
+.watchlist-table th,
+.watchlist-table td {
+    padding: 8px 4px; /* More compact padding */
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.watchlist-table th {
+    background-color: #f0f4f8;
+    font-weight: bold;
+    position: sticky;
+    top: 0;
+}
+
+.watchlist-table td:nth-child(2),
+.watchlist-table td:nth-child(3),
+.watchlist-table td:nth-child(4),
+.watchlist-table td:nth-child(5) {
+    text-align: right;
+    font-family: 'Courier New', Courier, monospace; /* Monospace for numbers */
+}
+
+.watchlist-upside {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.watchlist-downside {
+    color: #dc3545;
+    font-weight: bold;
+}
+
+.watchlist-date {
+    font-size: 0.9em;
+    color: #666;
+    display: block;
+}
+
+.watchlist-remove {
+    color: #dc3545;
+    cursor: pointer;
+    font-weight: bold;
+    text-align: center;
+    font-size: 1.1em;
+}
+.watchlist-remove:hover {
+    color: #a01c2a;
+}
+
 
 /* Modal Styles */
 .modal-container {

@@ -120,58 +120,85 @@ To populate the values, follow this methodology:
 
     const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
+    // --- START: MODIFIED SECTION ---
+    const maxRetries = 3;
+    let delay = 2000; // 2 seconds
+
     try {
-        const response = await fetch(`${GEMINI_CLOUD_ENDPOINT}?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: userPrompt }] }],
-                // Use Google Search grounding to get real-time financial data.
-                tools: [{ "google_search": {} }],
-                generationConfig: {
-                    temperature: 0.1, // Very low temperature for factual data retrieval
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const response = await fetch(`${GEMINI_CLOUD_ENDPOINT}?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: userPrompt }] }],
+                        tools: [{ "google_search": {} }],
+                        generationConfig: {
+                            temperature: 0.1,
+                        }
+                    })
+                });
+
+                if (response.ok) {
+                    // --- SUCCESS ---
+                    const data = await response.json();
+                    if (!data.candidates || !data.candidates[0].content.parts[0].text) {
+                        throw new Error("Invalid response structure from Gemini API.");
+                    }
+                    
+                    const rawText = data.candidates[0].content.parts[0].text;
+                    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+                    if (!jsonMatch) {
+                        throw new Error("Could not find a valid JSON object in the model's response.");
+                    }
+                    
+                    const result = JSON.parse(jsonMatch[0]);
+                    
+                    if (
+                        !result ||
+                        typeof result.latestPrice !== 'number' ||
+                        !result.dcfParameters ||
+                        !result.rationale ||
+                        !result.analystConsensus ||
+                        typeof result.dcfParameters.ttmNopat !== 'number' ||
+                        typeof result.dcfParameters.costOfEquity !== 'number' ||
+                        typeof result.analystConsensus.target_12m !== 'number'
+                    ) {
+                        throw new Error("The parsed JSON does not match the expected DCF parameter structure.");
+                    }
+                    
+                    return result; // Success: Exit the loop and function
                 }
-            })
-        });
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`API Error (${response.status}): ${errorText}`);
+                // --- RETRYABLE SERVER ERROR (like 500) ---
+                const status = response.status;
+                if (status === 500 || status === 503 || status === 504) {
+                    console.warn(`Attempt ${attempt} failed with ${status}. Retrying in ${delay / 1000}s...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2; // Exponential backoff
+                    continue; // Go to the next attempt
+                }
+
+                // --- NON-RETRYABLE CLIENT ERROR (like 400, 401) ---
+                const errorText = await response.text();
+                throw new Error(`API Error (${status}): ${errorText}`); // This will be caught by the outer catch
+
+            } catch (networkError) {
+                // --- NETWORK ERROR or other fetch-related error ---
+                console.warn(`Attempt ${attempt} failed with network error: ${networkError.message}. Retrying in ${delay / 1000}s...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2; // Exponential backoff
+            }
         }
 
-        const data = await response.json();
-        if (!data.candidates || !data.candidates[0].content.parts[0].text) {
-             throw new Error("Invalid response structure from Gemini API.");
-        }
-        
-        // --- PARSING LOGIC TO EXTRACT JSON FROM A TEXT RESPONSE ---
-        const rawText = data.candidates[0].content.parts[0].text;
-        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-            throw new Error("Could not find a valid JSON object in the model's response.");
-        }
-        
-        const result = JSON.parse(jsonMatch[0]);
-        
-        // A robust validation check for the new structure
-        if (
-            !result ||
-            typeof result.latestPrice !== 'number' ||
-            !result.dcfParameters ||
-            !result.rationale ||
-            !result.analystConsensus || // Check for new consensus object
-            typeof result.dcfParameters.ttmNopat !== 'number' ||
-            typeof result.dcfParameters.costOfEquity !== 'number' ||
-            typeof result.analystConsensus.target_12m !== 'number' // Check for new consensus field
-        ) {
-            throw new Error("The parsed JSON does not match the expected DCF parameter structure.");
-        }
-        
-        // Return the full JSON object to the popup
-        return result;
+        // --- FAILED ALL RETRIES ---
+        throw new Error("Failed to get parameters from Gemini after multiple attempts.");
 
     } catch (error) {
+        // This outer catch now handles non-retryable errors or the final "failed all retries" error
         console.error(`Valuation parameter fetch failed for ${ticker}:`, error);
-        return { error: `Failed to get parameters from Gemini. ${error.message}` };
+        // This is the error message that popup.js will display
+        return { error: `Failed to get parameters. ${error.message}` };
     }
+    // --- END: MODIFIED SECTION ---
 }
