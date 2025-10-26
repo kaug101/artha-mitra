@@ -7,10 +7,11 @@
 <body>
     <div id="notification" class="notification-bar" style="display:none;"></div>
 
-    <!-- NEW: View Navigation -->
+    <!-- UPDATED: View Navigation -->
     <div class="view-nav">
         <button id="nav-analysis" class="nav-btn active">Analysis</button>
         <button id="nav-watchlist" class="nav-btn">Watchlist</button>
+        <button id="nav-news" class="nav-btn">News</button>
     </div>
 
     <!-- Header with Cloud Icon -->
@@ -19,8 +20,8 @@
         <svg id="cloudKeyIcon" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
     </div>
 
-    <!-- NEW: Analysis View Wrapper -->
-    <div id="analysis-view">
+    <!-- Analysis View Wrapper -->
+    <div id="analysis-view" style="display:block;">
         <!-- Ticker Input for single stock -->
         <input type="text" id="tickerInput" placeholder="Enter Single Ticker (e.g., AAPL)">
         <!-- UPDATED: Single button for all actions -->
@@ -197,13 +198,34 @@
         </div>
     </div> <!-- End of analysis-view -->
 
-    <!-- NEW: Watchlist View -->
+    <!-- Watchlist View -->
     <div id="watchlist-view" style="display:none;">
         <h2>My Watchlist</h2>
         <div id="watchlist-content">
             <!-- Watchlist items will be populated here by JS -->
         </div>
     </div>
+
+    <!-- NEW: News View -->
+    <div id="news-view" style="display:none;">
+        <h2>Global News Impact</h2>
+        
+        <!-- Sub-navigation for news timeframe -->
+        <div class="sub-nav">
+            <button id="news-12h" class="sub-nav-btn active" data-timeframe="12 hours">Last 12 Hours</button>
+            <button id="news-7d" class="sub-nav-btn" data-timeframe="7 days">Last 7 Days</button>
+            <button id="news-3m" class="sub-nav-btn" data-timeframe="3 months">Last 3 Months</button>
+        </div>
+
+        <div id="news-loading" style="display:none; color: orange; padding: 10px; text-align: center;">
+            <p>Gemini is scanning global news...</p>
+        </div>
+        
+        <div id="news-content">
+            <!-- News items will be populated here by JS -->
+        </div>
+    </div>
+
 
     <!-- API Key Modal (hidden by default) -->
     <div id="apiKeyModal" class="modal-container">

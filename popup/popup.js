@@ -309,28 +309,49 @@ function displayRationaleDetails(rationale) {
     document.getElementById('rationale-analystConsensus').textContent = rationale.analystConsensus || 'N/A';
 }
 
-// --- NEW: View Navigation ---
+// --- View Navigation ---
 function handleNavClick(view) {
+    // View containers
     const analysisView = document.getElementById('analysis-view');
     const watchlistView = document.getElementById('watchlist-view');
+    const newsView = document.getElementById('news-view'); // Added
+    
+    // Nav buttons
     const navAnalysis = document.getElementById('nav-analysis');
     const navWatchlist = document.getElementById('nav-watchlist');
+    const navNews = document.getElementById('nav-news'); // Added
+
+    // Hide all views
+    analysisView.style.display = 'none';
+    watchlistView.style.display = 'none';
+    newsView.style.display = 'none';
+    
+    // Deactivate all nav buttons
+    navAnalysis.classList.remove('active');
+    navWatchlist.classList.remove('active');
+    navNews.classList.remove('active');
 
     if (view === 'watchlist') {
-        analysisView.style.display = 'none';
         watchlistView.style.display = 'block';
-        navAnalysis.classList.remove('active');
         navWatchlist.classList.add('active');
         loadWatchlist(); // Refresh watchlist every time it's viewed
+    } else if (view === 'news') { // Added
+        newsView.style.display = 'block';
+        navNews.classList.add('active');
+        // Trigger default news load (e.g., 12 hours)
+        const defaultTimeframe = "12 hours";
+        fetchGlobalNews(defaultTimeframe);
+        // Ensure correct sub-nav button is active
+        document.querySelectorAll('.sub-nav-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.timeframe === defaultTimeframe);
+        });
     } else { // 'analysis'
         analysisView.style.display = 'block';
-        watchlistView.style.display = 'none';
         navAnalysis.classList.add('active');
-        navWatchlist.classList.remove('active');
     }
 }
 
-// --- NEW: Load and Display Watchlist ---
+// --- Load and Display Watchlist ---
 async function loadWatchlist() {
     const content = document.getElementById('watchlist-content');
     content.innerHTML = '<p>Loading watchlist...</p>';
@@ -410,7 +431,7 @@ async function loadWatchlist() {
     }
 }
 
-// --- NEW: Remove Item from Watchlist ---
+// --- Remove Item from Watchlist ---
 async function removeWatchlistItem(ticker) {
     if (!ticker) return;
     try {
@@ -435,7 +456,7 @@ async function removeWatchlistItem(ticker) {
 }
 
 
-// --- NEW: Check Watchlist Status for Current Ticker ---
+// --- Check Watchlist Status for Current Ticker ---
 async function checkWatchlistStatus(ticker) {
     if (!ticker) return;
     try {
@@ -454,7 +475,7 @@ async function checkWatchlistStatus(ticker) {
     }
 }
 
-// --- NEW: Handle Favorite (Heart) Click ---
+// --- Handle Favorite (Heart) Click ---
 async function handleFavoriteClick() {
     const heart = document.getElementById('favorite-heart');
     const ticker = heart.dataset.ticker;
@@ -500,6 +521,72 @@ async function handleFavoriteClick() {
     }
 }
 
+// --- NEW: News Tab Logic ---
+
+// 1. Fetch Global News
+function fetchGlobalNews(timeframe) {
+    const loading = document.getElementById('news-loading');
+    const content = document.getElementById('news-content');
+    
+    loading.style.display = 'block';
+    content.innerHTML = ''; // Clear previous results
+
+    chrome.runtime.sendMessage({ action: "getNews", timeframe: timeframe }, (response) => {
+        loading.style.display = 'none';
+        
+        if (chrome.runtime.lastError) {
+            console.error("Error from background:", chrome.runtime.lastError.message);
+            showNotification("An error occurred. Check the service worker console.", "error");
+            content.innerHTML = '<p>Error loading news.</p>';
+            return;
+        }
+        
+        if (response && response.error) {
+             showNotification(`News Error: ${response.error}`, 'error');
+             content.innerHTML = '<p>Error loading news.</p>';
+        } else if (response && response.newsItems) {
+            displayNews(response.newsItems);
+            showNotification(`Top ${response.newsItems.length} news items loaded.`, 'success');
+        } else {
+            showNotification('Could not find news.', 'error');
+            content.innerHTML = '<p>No news items were found.</p>';
+        }
+    });
+}
+
+// 2. Display News
+function displayNews(newsItems) {
+    const content = document.getElementById('news-content');
+    content.innerHTML = ''; // Clear again just in case
+
+    if (newsItems.length === 0) {
+        content.innerHTML = '<p>No news items were found for this period.</p>';
+        return;
+    }
+
+    for (const item of newsItems) {
+        let impactTags = '';
+        if (item.affectedAssets && item.affectedAssets.length > 0) {
+            impactTags = item.affectedAssets.map(asset => {
+                const name = asset.name || 'N/A';
+                const ticker = asset.ticker ? ` (${asset.ticker})` : '';
+                return `<span class="news-impact-tag">${name}${ticker}</span>`;
+            }).join('');
+        } else {
+            impactTags = '<span class="news-impact-tag">General</span>';
+        }
+
+        content.innerHTML += `
+            <div class="news-item-card">
+                <h5>${item.headline || 'No Headline'}</h5>
+                <p class="news-source">Source: ${item.source || 'Unknown'}</p>
+                <p>${item.summary || 'No summary available.'}</p>
+                <span class="news-impact-label">Key Assets Affected:</span>
+                ${impactTags}
+            </div>
+        `;
+    }
+}
 
 // --- Event Listeners ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -528,7 +615,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const key = inputElement.value.trim();
         if (key) {
             await chrome.storage.local.set({ [API_KEY_STORAGE_KEY]: key });
-             showNotification('Gemini API Key saved successfully!', 'success');
+             showNotification('Gemini APIKey saved successfully!', 'success');
         } else {
             await chrome.storage.local.remove(API_KEY_STORAGE_KEY);
             showNotification('Gemini API Key removed.', 'info');
@@ -546,10 +633,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // --- NEW: View Navigation Listeners ---
+    // --- View Navigation Listeners ---
     document.getElementById('nav-analysis').addEventListener('click', () => handleNavClick('analysis'));
     document.getElementById('nav-watchlist').addEventListener('click', () => handleNavClick('watchlist'));
+    document.getElementById('nav-news').addEventListener('click', () => handleNavClick('news')); // Added
 
-    // --- NEW: Heart Icon Listener ---
+    // --- Heart Icon Listener ---
     document.getElementById('favorite-heart').addEventListener('click', handleFavoriteClick);
+
+    // --- NEW: News Sub-Nav Listeners ---
+    document.querySelectorAll('.sub-nav-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            // Deactivate all
+            document.querySelectorAll('.sub-nav-btn').forEach(btn => btn.classList.remove('active'));
+            // Activate clicked one
+            button.classList.add('active');
+            // Fetch news for the selected timeframe
+            const timeframe = button.dataset.timeframe;
+            fetchGlobalNews(timeframe);
+        });
+    });
 });

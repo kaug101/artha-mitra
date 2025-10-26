@@ -1,8 +1,5 @@
 // background.js
 
-// --- 1. Global API Initialization ---
-const FMP_API_KEY_STORAGE_KEY = 'fmpCloudApiKey'; // Kept for any future fallback, but not used in primary logic.
-
 // --- 1.A. Open in Independent Window ---
 // Listen for the extension icon to be clicked
 chrome.action.onClicked.addListener((tab) => {
@@ -33,6 +30,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         handleValuation(request.ticker).then(sendResponse);
         return true; // Keep message channel open for async response
     }
+    // NEW: Add listener for news
+    if (request.action === "getNews") {
+        handleNewsRequest(request.timeframe).then(sendResponse);
+        return true; // Keep message channel open for async response
+    }
     return true;
 });
 
@@ -43,6 +45,81 @@ async function getGeminiApiKey() {
     const result = await chrome.storage.local.get('geminiCloudApiKey');
     return result.geminiCloudApiKey;
 }
+
+// Re-usable retry logic for Gemini API calls
+async function fetchWithRetry(apiKey, endpoint, payload) {
+    const maxRetries = 3;
+    let delay = 2000; // 2 seconds
+    let lastError = null; // Store the last error encountered
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const response = await fetch(`${endpoint}?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+                // --- SUCCESS ---
+                const data = await response.json();
+                if (!data.candidates || !data.candidates[0].content.parts[0].text) {
+                    throw new Error("Invalid response structure from Gemini API.");
+                }
+                
+                const rawText = data.candidates[0].content.parts[0].text;
+                // Look for JSON, which might be wrapped in markdown
+                const jsonMatch = rawText.match(/\{[\s\S]*\}/); 
+                if (!jsonMatch) {
+                    // Fallback for simple JSON array
+                    const jsonArrayMatch = rawText.match(/\[[\s\S]*\]/);
+                    if (!jsonArrayMatch) {
+                        throw new Error("Could not find a valid JSON object or array in the model's response.");
+                    }
+                    return jsonArrayMatch[0]; // Return the JSON array string
+                }
+                return jsonMatch[0]; // Return the JSON object string
+            }
+
+            // --- RETRYABLE SERVER ERROR (like 500, 503, 504, or 429) ---
+            const status = response.status;
+            // Added 429 (Too Many Requests) as a retryable error
+            if (status === 500 || status === 503 || status === 504 || status === 429) {
+                const errorText = await response.text();
+                lastError = new Error(`API Error (${status}): ${errorText}. Retrying...`); // Store this error
+                console.warn(`Attempt ${attempt} failed with ${status}. Retrying in ${delay / 1000}s...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2; // Exponential backoff
+                continue; // Go to the next attempt
+            }
+
+            // --- NON-RETRYABLE CLIENT ERROR (like 400, 401, 403) ---
+            const errorText = await response.text();
+            lastError = new Error(`API Error (${status}): ${errorText}`); // Store this error
+            throw lastError; // Throw to exit the retry loop immediately
+
+        } catch (error) {
+            // This will catch network errors or the thrown non-retryable error
+            lastError = error; // Store this error
+            
+            if (error.message.startsWith('API Error')) {
+                 // This was a non-retryable error, so we break the loop
+                 console.error(`Non-retryable error encountered: ${error.message}`);
+                 break; 
+            }
+
+            // --- NETWORK ERROR or other fetch-related error ---
+            console.warn(`Attempt ${attempt} failed with network error: ${error.message}. Retrying in ${delay / 1000}s...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2; // Exponential backoff
+        }
+    }
+
+    // --- FAILED ALL RETRIES or broke from loop ---
+    // Throw a more informative error
+    throw new Error(`Failed to get a response from Gemini after ${maxRetries} attempts. Last error: ${lastError ? lastError.message : 'Unknown error'}`);
+}
+
 
 async function handleValuation(ticker) {
     const apiKey = await getGeminiApiKey();
@@ -123,86 +200,97 @@ To populate the values, follow this methodology:
 `;
 
     const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
-
-    // --- START: MODIFIED SECTION ---
-    const maxRetries = 3;
-    let delay = 2000; // 2 seconds
+    
+    const payload = {
+        contents: [{ parts: [{ text: userPrompt }] }],
+        tools: [{ "google_search": {} }],
+        generationConfig: {
+            temperature: 0.1
+            // REMOVED: responseMimeType: "application/json", 
+        }
+    };
 
     try {
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                const response = await fetch(`${GEMINI_CLOUD_ENDPOINT}?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: userPrompt }] }],
-                        tools: [{ "google_search": {} }],
-                        generationConfig: {
-                            temperature: 0.1,
-                        }
-                    })
-                });
+        const rawJsonString = await fetchWithRetry(apiKey, GEMINI_CLOUD_ENDPOINT, payload);
+        const result = JSON.parse(rawJsonString);
 
-                if (response.ok) {
-                    // --- SUCCESS ---
-                    const data = await response.json();
-                    if (!data.candidates || !data.candidates[0].content.parts[0].text) {
-                        throw new Error("Invalid response structure from Gemini API.");
-                    }
-                    
-                    const rawText = data.candidates[0].content.parts[0].text;
-                    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-                    if (!jsonMatch) {
-                        throw new Error("Could not find a valid JSON object in the model's response.");
-                    }
-                    
-                    const result = JSON.parse(jsonMatch[0]);
-                    
-                    if (
-                        !result ||
-                        typeof result.latestPrice !== 'number' ||
-                        !result.dcfParameters ||
-                        !result.rationale ||
-                        !result.analystConsensus ||
-                        typeof result.dcfParameters.ttmNopat !== 'number' ||
-                        typeof result.dcfParameters.costOfEquity !== 'number' ||
-                        typeof result.analystConsensus.target_12m !== 'number'
-                    ) {
-                        throw new Error("The parsed JSON does not match the expected DCF parameter structure.");
-                    }
-                    
-                    return result; // Success: Exit the loop and function
-                }
-
-                // --- RETRYABLE SERVER ERROR (like 500) ---
-                const status = response.status;
-                if (status === 500 || status === 503 || status === 504) {
-                    console.warn(`Attempt ${attempt} failed with ${status}. Retrying in ${delay / 1000}s...`);
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    delay *= 2; // Exponential backoff
-                    continue; // Go to the next attempt
-                }
-
-                // --- NON-RETRYABLE CLIENT ERROR (like 400, 401) ---
-                const errorText = await response.text();
-                throw new Error(`API Error (${status}): ${errorText}`); // This will be caught by the outer catch
-
-            } catch (networkError) {
-                // --- NETWORK ERROR or other fetch-related error ---
-                console.warn(`Attempt ${attempt} failed with network error: ${networkError.message}. Retrying in ${delay / 1000}s...`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-                delay *= 2; // Exponential backoff
-            }
+        if (
+            !result ||
+            typeof result.latestPrice !== 'number' ||
+            !result.dcfParameters ||
+            !result.rationale ||
+            !result.analystConsensus ||
+            typeof result.dcfParameters.ttmNopat !== 'number' ||
+            typeof result.dcfParameters.costOfEquity !== 'number' ||
+            typeof result.analystConsensus.target_12m !== 'number' // Corrected this line
+        ) {
+            throw new Error("The parsed JSON does not match the expected DCF parameter structure.");
         }
-
-        // --- FAILED ALL RETRIES ---
-        throw new Error("Failed to get parameters from Gemini after multiple attempts.");
+        
+        return result; // Success
 
     } catch (error) {
-        // This outer catch now handles non-retryable errors or the final "failed all retries" error
         console.error(`Valuation parameter fetch failed for ${ticker}:`, error);
-        // This is the error message that popup.js will display
         return { error: `Failed to get parameters. ${error.message}` };
     }
-    // --- END: MODIFIED SECTION ---
 }
+
+// --- NEW: 4. Gemini-Powered News Fetch ---
+async function handleNewsRequest(timeframe) {
+    const apiKey = await getGeminiApiKey();
+    if (!apiKey) {
+        return { error: "Gemini API Key not found. Please add it via the cloud icon in the popup." };
+    }
+
+    const newsPrompt = `
+You are a financial news analyst. Your task is to find the "Top 10" most impactful global financial or economic news stories from the specified timeframe: "${timeframe}".
+You must use your search tools to find real-time, relevant news.
+For each news item, provide a brief 1-2 sentence summary and identify a maximum of 3 key sectors or specific stocks (with tickers) that are most affected.
+
+Your entire response MUST be a single, validated JSON object. Do not include any text, markdown, or commentary before or after the JSON object.
+
+The JSON object must follow this exact structure:
+{
+  "newsItems": [
+    {
+      "headline": "Example: Fed Hints at Earlier-Than-Expected Rate Cuts",
+      "summary": "Summary of the news item, explaining what happened and why it matters.",
+      "source": "Reputable news source (e.g., Bloomberg, Reuters, WSJ)",
+      "affectedAssets": [
+        { "name": "US Technology Sector", "ticker": null },
+        { "name": "Gold", "ticker": "GLD" },
+        { "name": "JPMorgan Chase", "ticker": "JPM" }
+      ]
+    }
+  ]
+}
+`;
+
+    const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+    
+    const payload = {
+        contents: [{ parts: [{ text: newsPrompt }] }],
+        tools: [{ "google_search": {} }],
+        generationConfig: {
+            temperature: 0.2
+            // REMOVED: responseMimeType: "application/json",
+        }
+    };
+
+    try {
+        const rawJsonString = await fetchWithRetry(apiKey, GEMINI_CLOUD_ENDPOINT, payload);
+        const result = JSON.parse(rawJsonString);
+
+        // Validate the structure
+        if (!result || !Array.isArray(result.newsItems)) {
+             throw new Error("The parsed JSON does not match the expected news structure.");
+        }
+        
+        return result; // Success
+
+    } catch (error) {
+        console.error(`Global news fetch failed:`, error);
+        return { error: `Failed to get news. ${error.message}` };
+    }
+}
+
