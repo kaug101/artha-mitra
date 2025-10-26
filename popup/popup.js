@@ -1,7 +1,15 @@
 // popup.js
 
 const API_KEY_STORAGE_KEY = 'geminiCloudApiKey';
-const WATCHLIST_KEY = 'watchlistStocks'; // New key for watchlist
+const WATCHLIST_KEY = 'watchlistStocks'; // Key for watchlist
+const NEWS_CACHE_KEY = 'newsCache'; // NEW: Key for caching news
+
+// NEW: Rules for how long to keep news before refreshing (in milliseconds)
+const NEWS_REFRESH_RULES = {
+    "12 hours": 2 * 60 * 60 * 1000,   // 2 hours
+    "7 days": 24 * 60 * 60 * 1000,  // 24 hours
+    "3 months": 7 * 24 * 60 * 60 * 1000 // 7 days
+};
 
 // Stores data for the *currently* analyzed stock
 let currentStockData = null; 
@@ -89,7 +97,6 @@ function runTickerAnalysis(ticker) {
         } else if (response && response.dcfParameters) {
             populateDcfInputs(response);
             
-            // --- NEW LOGIC (Request 2) ---
             // Automatically calculate intrinsic value
             calculateLocalDcf(response.ticker); // Pass ticker for watchlist check
             
@@ -99,10 +106,9 @@ function runTickerAnalysis(ticker) {
                 displayRationaleDetails(rationaleData);
                 document.getElementById('rationaleSection').style.display = 'block';
             }
-            // --- END NEW LOGIC ---
 
             document.getElementById('dcf-container').style.display = 'block';
-            showNotification('DCF Parameters & Rationale loaded.', 'success'); // Updated message
+            showNotification('DCF Parameters & Rationale loaded.', 'success');
         
         } else {
             showNotification(`Could not find data for ${ticker}.`, 'error');
@@ -296,11 +302,8 @@ function adjustInputValue(field, op) {
 function displayRationaleDetails(rationale) {
     if (!rationale) return;
 
-    // --- UPDATED: Added new fields ---
     document.getElementById('rationale-megatrends').textContent = rationale.sectoralMegatrends || 'N/A';
     document.getElementById('rationale-swot').textContent = rationale.swotAnalysis || 'N/A';
-    // --- End of Update ---
-
     document.getElementById('rationale-ufcf').textContent = rationale.ufcfComponents + "\n\n" + rationale.ufcfGrowthRate || 'N/A';
     document.getElementById('rationale-wacc').textContent = rationale.waccComponents || 'N/A';
     document.getElementById('rationale-netDebt').textContent = rationale.netDebt || 'N/A';
@@ -314,12 +317,12 @@ function handleNavClick(view) {
     // View containers
     const analysisView = document.getElementById('analysis-view');
     const watchlistView = document.getElementById('watchlist-view');
-    const newsView = document.getElementById('news-view'); // Added
+    const newsView = document.getElementById('news-view');
     
     // Nav buttons
     const navAnalysis = document.getElementById('nav-analysis');
     const navWatchlist = document.getElementById('nav-watchlist');
-    const navNews = document.getElementById('nav-news'); // Added
+    const navNews = document.getElementById('nav-news');
 
     // Hide all views
     analysisView.style.display = 'none';
@@ -335,16 +338,27 @@ function handleNavClick(view) {
         watchlistView.style.display = 'block';
         navWatchlist.classList.add('active');
         loadWatchlist(); // Refresh watchlist every time it's viewed
-    } else if (view === 'news') { // Added
+    } else if (view === 'news') {
         newsView.style.display = 'block';
         navNews.classList.add('active');
-        // Trigger default news load (e.g., 12 hours)
-        const defaultTimeframe = "12 hours";
-        fetchGlobalNews(defaultTimeframe);
-        // Ensure correct sub-nav button is active
-        document.querySelectorAll('.sub-nav-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.timeframe === defaultTimeframe);
-        });
+        
+        // --- MODIFIED LOGIC ---
+        // Find the currently active sub-nav button
+        let activeTimeframe = "12 hours"; // Default
+        const activeBtn = document.querySelector('.sub-nav-btn.active');
+        if (activeBtn) {
+            activeTimeframe = activeBtn.dataset.timeframe;
+        } else {
+            // Ensure default is marked active if none are
+            document.querySelectorAll('.sub-nav-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.timeframe === activeTimeframe);
+            });
+        }
+        
+        // Call the new master function to load cache and check for refresh
+        loadAndRefreshNews(activeTimeframe);
+        // --- END MODIFIED LOGIC ---
+
     } else { // 'analysis'
         analysisView.style.display = 'block';
         navAnalysis.classList.add('active');
@@ -523,63 +537,208 @@ async function handleFavoriteClick() {
 
 // --- NEW: News Tab Logic ---
 
-// 1. Fetch Global News
-function fetchGlobalNews(timeframe) {
+// --- NEW: Set News Status Icon ---
+function setNewsStatusIcon(status) { // 'old', 'updating', 'updated'
+    const icon = document.getElementById('news-status-icon');
+    if (!icon) return;
+
+    icon.classList.remove('status-updating', 'status-updated');
+    icon.title = "News data status: Unknown";
+
+    if (status === 'updating') {
+        icon.classList.add('status-updating');
+        icon.title = "News data status: Updating in background...";
+    } else if (status === 'updated') {
+        icon.classList.add('status-updated');
+        icon.title = "News data status: Up to date.";
+    } else { // 'old' or default
+        // No extra class needed, default is red
+        icon.title = "News data status: Old. Update may be needed.";
+    }
+}
+
+// --- NEW: Save News to Cache ---
+async function saveNewsToCache(timeframe, newsItems) {
+    try {
+        const result = await chrome.storage.local.get(NEWS_CACHE_KEY);
+        const cache = result[NEWS_CACHE_KEY] || {};
+        cache[timeframe] = {
+            lastUpdated: new Date().toISOString(),
+            newsItems: newsItems
+        };
+        await chrome.storage.local.set({ [NEWS_CACHE_KEY]: cache });
+    } catch (e) {
+        console.error("Error saving news to cache:", e);
+    }
+}
+
+// --- NEW: Load News from Cache ---
+async function loadNewsFromCache(timeframe) {
+    try {
+        const result = await chrome.storage.local.get(NEWS_CACHE_KEY);
+        const cache = result[NEWS_CACHE_KEY] || {};
+        return cache[timeframe]; // Returns { lastUpdated, newsItems } or undefined
+    } catch (e) {
+        console.error("Error loading news from cache:", e);
+        return undefined;
+    }
+}
+
+// --- NEW: Master Function to Load and Refresh News ---
+async function loadAndRefreshNews(timeframe) {
     const loading = document.getElementById('news-loading');
     const content = document.getElementById('news-content');
     
-    loading.style.display = 'block';
-    content.innerHTML = ''; // Clear previous results
-
-    chrome.runtime.sendMessage({ action: "getNews", timeframe: timeframe }, (response) => {
+    // 1. Immediately load from cache
+    const cachedData = await loadNewsFromCache(timeframe);
+    
+    if (cachedData && cachedData.newsItems.length > 0) {
+        displayNews(cachedData.newsItems); // Show stale data immediately
+        content.style.display = 'block';
         loading.style.display = 'none';
-        
-        if (chrome.runtime.lastError) {
-            console.error("Error from background:", chrome.runtime.lastError.message);
-            showNotification("An error occurred. Check the service worker console.", "error");
-            content.innerHTML = '<p>Error loading news.</p>';
-            return;
+    } else {
+        // No cache, show loading
+        content.innerHTML = '';
+        content.style.display = 'none';
+        loading.style.display = 'block';
+        setNewsStatusIcon('old'); // No data, so it's 'old'
+    }
+
+    // 2. Decide if a fetch is needed
+    const now = new Date().getTime();
+    const lastUpdated = cachedData ? new Date(cachedData.lastUpdated).getTime() : 0;
+    const refreshInterval = NEWS_REFRESH_RULES[timeframe];
+    const needsRefresh = (now - lastUpdated > refreshInterval) || !cachedData;
+
+    if (needsRefresh) {
+        // 3.a. Fetch in background
+        setNewsStatusIcon('updating');
+        if (!cachedData) { // Only show loading spinner if we have NO data at all
+            loading.style.display = 'block';
+            content.style.display = 'none';
         }
         
-        if (response && response.error) {
-             showNotification(`News Error: ${response.error}`, 'error');
-             content.innerHTML = '<p>Error loading news.</p>';
-        } else if (response && response.newsItems) {
-            displayNews(response.newsItems);
-            showNotification(`Top ${response.newsItems.length} news items loaded.`, 'success');
-        } else {
-            showNotification('Could not find news.', 'error');
-            content.innerHTML = '<p>No news items were found.</p>';
+        chrome.runtime.sendMessage({ action: "getNews", timeframe: timeframe }, async (response) => {
+            // This callback runs when the fetch completes
+            
+            if (chrome.runtime.lastError) {
+                console.error("Error from background:", chrome.runtime.lastError.message);
+                showNotification("An error occurred. Check the service worker console.", "error");
+                if (!cachedData) { // If we had no cache, hide loading and show error
+                    loading.style.display = 'none';
+                    content.innerHTML = '<p>Error loading news.</p>';
+                    content.style.display = 'block';
+                }
+                setNewsStatusIcon('old'); // Fetch failed, data is old
+                return;
+            }
+            
+            if (response && response.error) {
+                 showNotification(`News Error: ${response.error}`, 'error');
+                 if (!cachedData) {
+                    loading.style.display = 'none';
+                    content.innerHTML = '<p>Error loading news.</p>';
+                    content.style.display = 'block';
+                 }
+                 setNewsStatusIcon('old');
+            } else if (response && response.newsItems) {
+                // SUCCESS!
+                loading.style.display = 'none';
+                content.style.display = 'block';
+                
+                displayNews(response.newsItems); // Display the new data
+                await saveNewsToCache(timeframe, response.newsItems); // Save it
+                setNewsStatusIcon('updated'); // Mark as updated
+                
+                // Only show notification if we *didn't* have a cache
+                if (!cachedData) {
+                    showNotification(`Top ${response.newsItems.length} news items loaded.`, 'success');
+                }
+            } else {
+                // Empty response
+                showNotification('Could not find news.', 'error');
+                if (!cachedData) {
+                    loading.style.display = 'none';
+                    content.innerHTML = '<p>No news items were found.</p>';
+                    content.style.display = 'block';
+                }
+                setNewsStatusIcon('old'); // Failed to get data
+            }
+        });
+
+    } else {
+        // 3.b. No fetch needed, cache is fresh
+        setNewsStatusIcon('updated');
+        if (loading.style.display === 'block') { // Should only happen if cache was empty but fetch not needed (rare)
+             loading.style.display = 'none';
+             content.style.display = 'block';
+             if(cachedData) displayNews(cachedData.newsItems);
         }
-    });
+    }
 }
 
-// 2. Display News
+
+// --- UPDATED: 2. Display News ---
 function displayNews(newsItems) {
     const content = document.getElementById('news-content');
-    content.innerHTML = ''; // Clear again just in case
+    content.innerHTML = ''; // Clear previous
+    content.style.display = 'block'; // Ensure it's visible
 
-    if (newsItems.length === 0) {
+    if (!newsItems || newsItems.length === 0) {
         content.innerHTML = '<p>No news items were found for this period.</p>';
         return;
     }
 
     for (const item of newsItems) {
+        // 1. Format Ticker Links
         let impactTags = '';
         if (item.affectedAssets && item.affectedAssets.length > 0) {
             impactTags = item.affectedAssets.map(asset => {
                 const name = asset.name || 'N/A';
-                const ticker = asset.ticker ? ` (${asset.ticker})` : '';
-                return `<span class="news-impact-tag">${name}${ticker}</span>`;
+                const ticker = asset.ticker;
+                
+                if (ticker) {
+                    // Create a link if ticker exists
+                    return `<a href="#" class="news-ticker-link" data-ticker="${ticker}">${name} (${ticker})</a>`;
+                } else {
+                    // Just a regular span
+                    return `<span class="news-impact-tag">${name}</span>`;
+                }
             }).join('');
         } else {
             impactTags = '<span class="news-impact-tag">General</span>';
         }
 
+        // 2. Format Datetime
+        let formattedDate = 'Date unknown';
+        if (item.datetime) {
+            try {
+                const dateObj = new Date(item.datetime);
+                // Format: Oct 26, 11:30 AM
+                formattedDate = dateObj.toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true
+                });
+            } catch (e) {
+                console.warn("Could not parse news datetime:", item.datetime, e);
+                formattedDate = item.datetime; // Fallback to raw string
+            }
+        }
+        
+        // 3. Create HTML
         content.innerHTML += `
             <div class="news-item-card">
                 <h5>${item.headline || 'No Headline'}</h5>
-                <p class="news-source">Source: ${item.source || 'Unknown'}</p>
+                
+                <!-- NEW: Source and Date/Time row -->
+                <div class="news-meta">
+                    <span class="news-source">Source: ${item.source || 'Unknown'}</span>
+                    <span class="news-datetime">${formattedDate}</span>
+                </div>
+                
                 <p>${item.summary || 'No summary available.'}</p>
                 <span class="news-impact-label">Key Assets Affected:</span>
                 ${impactTags}
@@ -641,16 +800,43 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Heart Icon Listener ---
     document.getElementById('favorite-heart').addEventListener('click', handleFavoriteClick);
 
-    // --- NEW: News Sub-Nav Listeners ---
+    // --- MODIFIED: News Sub-Nav Listeners ---
     document.querySelectorAll('.sub-nav-btn').forEach(button => {
         button.addEventListener('click', () => {
             // Deactivate all
             document.querySelectorAll('.sub-nav-btn').forEach(btn => btn.classList.remove('active'));
             // Activate clicked one
             button.classList.add('active');
+            
+            // --- MODIFIED CALL ---
             // Fetch news for the selected timeframe
             const timeframe = button.dataset.timeframe;
-            fetchGlobalNews(timeframe);
+            loadAndRefreshNews(timeframe); // Use the new master function
+            // --- END MODIFIED CALL ---
         });
+    });
+    
+    // --- NEW: News Ticker Link Click Listener (Event Delegation) ---
+    document.getElementById('news-content').addEventListener('click', (e) => {
+        // Check if the clicked element is a ticker link
+        if (e.target.classList.contains('news-ticker-link')) {
+            e.preventDefault(); // Stop the link from navigating
+            
+            const ticker = e.target.dataset.ticker;
+            if (ticker) {
+                // 1. Set the value in the analysis input
+                document.getElementById('tickerInput').value = ticker;
+                
+                // 2. Switch to the analysis tab
+                handleNavClick('analysis');
+                
+                // 3. Optional: Automatically run the analysis
+                // runTickerAnalysis(ticker); 
+                // Decided against auto-running to let user click the button.
+                
+                // 4. Show a notification
+                showNotification(`Loaded ${ticker}. Click 'Run DCF Valuation' to analyze.`, 'info');
+            }
+        }
     });
 });

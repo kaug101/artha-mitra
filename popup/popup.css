@@ -331,8 +331,9 @@ h2, h3, h4 {
 
 /* --- NEW: News View --- */
 #news-view h2 {
-    border-bottom: 2px solid #007bff;
-    padding-bottom: 5px;
+    /* border-bottom: 2px solid #007bff; */ /* Removed border, moved to wrapper */
+    /* padding-bottom: 5px; */
+    margin-bottom: 10px; /* Added margin for spacing */
 }
 
 .sub-nav {
@@ -374,6 +375,35 @@ h2, h3, h4 {
     overflow-y: auto;
 }
 
+/* --- NEW: News Status Icon Styles --- */
+#news-status-icon {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #dc3545; /* Default to Red (old) */
+    transition: background-color 0.3s;
+    margin-right: 5px; /* Add some spacing */
+    flex-shrink: 0;
+}
+
+#news-status-icon.status-updating {
+    background-color: #ffc107; /* Orange (updating) */
+    animation: pulse 1.5s infinite;
+}
+
+#news-status-icon.status-updated {
+    background-color: #28a745; /* Green (up-to-date) */
+}
+
+/* Simple pulse animation for 'updating' */
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.4; }
+    100% { opacity: 1; }
+}
+/* --- End News Status Icon Styles --- */
+
+
 .news-item-card {
     background-color: #fff;
     border: 1px solid #e0e0e0;
@@ -387,16 +417,34 @@ h2, h3, h4 {
     color: #0056b3;
 }
 
-.news-item-card p {
-    font-size: 0.9em;
-    margin: 0 0 8px 0;
-}
+/* --- UPDATED/NEW News Item Styles --- */
 
-.news-item-card .news-source {
+/* NEW: Meta container for source and date */
+.news-meta {
+    display: flex;
+    justify-content: space-between;
     font-size: 0.8em;
     font-style: italic;
     color: #555;
     margin-bottom: 8px;
+}
+
+.news-meta .news-source {
+    /* No margin-bottom needed anymore */
+    text-align: left;
+    flex-basis: 50%;
+}
+
+.news-meta .news-datetime {
+    text-align: right;
+    font-weight: bold;
+    color: #333;
+    flex-basis: 50%;
+}
+
+.news-item-card p {
+    font-size: 0.9em;
+    margin: 0 0 8px 0;
 }
 
 .news-item-card .news-impact-label {
@@ -407,15 +455,35 @@ h2, h3, h4 {
     margin-bottom: 4px;
 }
 
-.news-impact-tag {
+/* Base style for both tags and links */
+.news-impact-tag,
+.news-ticker-link {
     display: inline-block;
-    background-color: #e0eafc;
-    color: #004085;
     padding: 3px 8px;
     border-radius: 12px;
     font-size: 0.8em;
     margin-right: 5px;
     margin-bottom: 5px;
+    text-decoration: none;
+}
+
+/* Style for non-clickable tags */
+.news-impact-tag {
+    background-color: #e0eafc;
+    color: #004085;
+}
+
+/* NEW: Style for clickable ticker links */
+.news-ticker-link {
+    background-color: #007bff;
+    color: #ffffff;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.news-ticker-link:hover {
+    background-color: #0056b3;
 }
 /* --- End News View --- */
 

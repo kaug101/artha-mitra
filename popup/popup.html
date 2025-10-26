@@ -208,7 +208,13 @@
 
     <!-- NEW: News View -->
     <div id="news-view" style="display:none;">
-        <h2>Global News Impact</h2>
+        
+        <!-- UPDATED: Header with status icon -->
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+             <h2 style="border-bottom: none; padding-bottom: 0;">Global News Impact</h2>
+             <!-- NEW: News Status Icon -->
+             <div id="news-status-icon" title="News data status"></div>
+        </div>
         
         <!-- Sub-navigation for news timeframe -->
         <div class="sub-nav">
@@ -221,7 +227,7 @@
             <p>Gemini is scanning global news...</p>
         </div>
         
-        <div id="news-content">
+        <div id="news-content" style="display: none;">
             <!-- News items will be populated here by JS -->
         </div>
     </div>

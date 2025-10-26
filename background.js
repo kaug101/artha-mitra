@@ -242,10 +242,15 @@ async function handleNewsRequest(timeframe) {
         return { error: "Gemini API Key not found. Please add it via the cloud icon in the popup." };
     }
 
+    // --- UPDATED PROMPT ---
     const newsPrompt = `
 You are a financial news analyst. Your task is to find the "Top 10" most impactful global financial or economic news stories from the specified timeframe: "${timeframe}".
 You must use your search tools to find real-time, relevant news.
-For each news item, provide a brief 1-2 sentence summary and identify a maximum of 3 key sectors or specific stocks (with tickers) that are most affected.
+For each news item, provide:
+1.  A brief 1-2 sentence summary.
+2.  The source (e.g., Bloomberg, Reuters).
+3.  The exact date and time of the article in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ).
+4.  A maximum of 3 key specific stocks (with tickers) that are most affected.
 
 Your entire response MUST be a single, validated JSON object. Do not include any text, markdown, or commentary before or after the JSON object.
 
@@ -256,6 +261,7 @@ The JSON object must follow this exact structure:
       "headline": "Example: Fed Hints at Earlier-Than-Expected Rate Cuts",
       "summary": "Summary of the news item, explaining what happened and why it matters.",
       "source": "Reputable news source (e.g., Bloomberg, Reuters, WSJ)",
+      "datetime": "2025-10-26T10:30:00Z",
       "affectedAssets": [
         { "name": "US Technology Sector", "ticker": null },
         { "name": "Gold", "ticker": "GLD" },
@@ -265,6 +271,7 @@ The JSON object must follow this exact structure:
   ]
 }
 `;
+    // --- END UPDATED PROMPT ---
 
     const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
     
@@ -283,7 +290,13 @@ The JSON object must follow this exact structure:
 
         // Validate the structure
         if (!result || !Array.isArray(result.newsItems)) {
-             throw new Error("The parsed JSON does not match the expected news structure.");
+             throw new Error("The parsed JSON does not match the expected news structure (missing newsItems array).");
+        }
+        
+        // Optional: Validate first item for new field
+        if (result.newsItems.length > 0 && typeof result.newsItems[0].datetime !== 'string') {
+            console.warn("Gemini response news item is missing 'datetime' string field.");
+            // Don't throw an error, just warn, in case model fails
         }
         
         return result; // Success
@@ -293,4 +306,3 @@ The JSON object must follow this exact structure:
         return { error: `Failed to get news. ${error.message}` };
     }
 }
-
