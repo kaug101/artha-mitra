@@ -50,7 +50,7 @@ async function handleValuation(ticker) {
         return { error: "Gemini API Key not found. Please add it via the cloud icon in the popup." };
     }
 
-    // --- REVISED PROMPT (Added analystConsensus) ---
+    // --- REVISED PROMPT (Added analystConsensus, sectoralMegatrends, swotAnalysis) ---
     const userPrompt = `
 You are acting as a prudent, neutral financial analyst. Your task is to fetch the key parameters required for a detailed Discounted Cash Flow (DCF) valuation for the company with ticker: "${ticker}".
 You must use the most current, real-time data available from your search tools.
@@ -93,7 +93,9 @@ The JSON object must follow this exact structure:
     "netDebt": "Rationale for the Net Debt value (Total Debt - Cash).",
     "sharesOutstanding": "Source and date for shares outstanding.",
     "perpetualGrowthRate": "Rationale for the perpetual growth rate (e.g., long-term inflation/GDP).",
-    "analystConsensus": "Source and rationale for the 3, 6, and 12-month analyst consensus price targets."
+    "analystConsensus": "Source and rationale for the 3, 6, and 12-month analyst consensus price targets.",
+    "sectoralMegatrends": "Rationale for key secular trends affecting the stock's sector (e.g., AI adoption, regulatory changes, consumer behavior shifts).",
+    "swotAnalysis": "Brief rationale for the stock's fundamental Strengths, Weaknesses, Opportunities, and Threats (SWOT)."
   }
 }
 
@@ -116,6 +118,8 @@ To populate the values, follow this methodology:
 3.  Populate "analystConsensus":
     * Fetch the 3-month, 6-month, and 12-month analyst consensus price targets.
 4.  Populate "rationale": For each group of parameters, provide a brief (1-2 sentence) justification for the values.
+    * **NEW**: Also populate "sectoralMegatrends" with key trends for the company's industry.
+    * **NEW**: Also populate "swotAnalysis" with a brief fundamental SWOT.
 `;
 
     const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";

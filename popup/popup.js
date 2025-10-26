@@ -295,6 +295,12 @@ function adjustInputValue(field, op) {
 // --- Display AI Rationale ---
 function displayRationaleDetails(rationale) {
     if (!rationale) return;
+
+    // --- UPDATED: Added new fields ---
+    document.getElementById('rationale-megatrends').textContent = rationale.sectoralMegatrends || 'N/A';
+    document.getElementById('rationale-swot').textContent = rationale.swotAnalysis || 'N/A';
+    // --- End of Update ---
+
     document.getElementById('rationale-ufcf').textContent = rationale.ufcfComponents + "\n\n" + rationale.ufcfGrowthRate || 'N/A';
     document.getElementById('rationale-wacc').textContent = rationale.waccComponents || 'N/A';
     document.getElementById('rationale-netDebt').textContent = rationale.netDebt || 'N/A';
