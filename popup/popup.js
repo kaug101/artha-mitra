@@ -3,6 +3,7 @@
 const API_KEY_STORAGE_KEY = 'geminiCloudApiKey';
 const WATCHLIST_KEY = 'watchlistStocks'; // Key for watchlist
 const NEWS_CACHE_KEY = 'newsCache'; // NEW: Key for caching news
+const SECTOR_CACHE_KEY = 'sectorRotationCache'; // NEW: Key for caching sectors
 
 // NEW: Rules for how long to keep news before refreshing (in milliseconds)
 const NEWS_REFRESH_RULES = {
@@ -10,6 +11,8 @@ const NEWS_REFRESH_RULES = {
     "7 days": 24 * 60 * 60 * 1000,  // 24 hours
     "3 months": 7 * 24 * 60 * 60 * 1000 // 7 days
 };
+// NEW: Refresh interval for sector data
+const SECTOR_REFRESH_INTERVAL = 4 * 60 * 60 * 1000; // 4 hours
 
 // Stores data for the *currently* analyzed stock
 let currentStockData = null; 
@@ -238,7 +241,10 @@ function calculateLocalDcf(ticker) {
         if (currentStockData) {
             currentStockData.dcfValue = intrinsicValuePerShare;
         }
-        checkWatchlistStatus(ticker); // Check and set heart state
+        
+        // --- UPDATED CALL ---
+        // Check, set heart state, and update watchlist if the stock is already present
+        checkAndUpdateWatchlistStatus(ticker); 
         document.getElementById('favorite-heart').style.display = 'block';
     
     } catch (e) {
@@ -318,21 +324,25 @@ function handleNavClick(view) {
     const analysisView = document.getElementById('analysis-view');
     const watchlistView = document.getElementById('watchlist-view');
     const newsView = document.getElementById('news-view');
+    const sectorsView = document.getElementById('sectors-view'); // NEW
     
     // Nav buttons
     const navAnalysis = document.getElementById('nav-analysis');
     const navWatchlist = document.getElementById('nav-watchlist');
     const navNews = document.getElementById('nav-news');
+    const navSectors = document.getElementById('nav-sectors'); // NEW
 
     // Hide all views
     analysisView.style.display = 'none';
     watchlistView.style.display = 'none';
     newsView.style.display = 'none';
+    sectorsView.style.display = 'none'; // NEW
     
     // Deactivate all nav buttons
     navAnalysis.classList.remove('active');
     navWatchlist.classList.remove('active');
     navNews.classList.remove('active');
+    navSectors.classList.remove('active'); // NEW
 
     if (view === 'watchlist') {
         watchlistView.style.display = 'block';
@@ -359,6 +369,10 @@ function handleNavClick(view) {
         loadAndRefreshNews(activeTimeframe);
         // --- END MODIFIED LOGIC ---
 
+    } else if (view === 'sectors') { // NEW
+        sectorsView.style.display = 'block';
+        navSectors.classList.add('active');
+        loadSectorRotationData(); // Call new function for loading sector data
     } else { // 'analysis'
         analysisView.style.display = 'block';
         navAnalysis.classList.add('active');
@@ -470,22 +484,40 @@ async function removeWatchlistItem(ticker) {
 }
 
 
-// --- Check Watchlist Status for Current Ticker ---
-async function checkWatchlistStatus(ticker) {
+// --- UPDATED: Check Watchlist Status and Update if Present ---
+async function checkAndUpdateWatchlistStatus(ticker) {
     if (!ticker) return;
     try {
         const result = await chrome.storage.local.get(WATCHLIST_KEY);
-        const watchlist = result[WATCHLIST_KEY] || [];
+        let watchlist = result[WATCHLIST_KEY] || [];
         const isFavorited = watchlist.some(item => item.ticker === ticker);
         
         const heart = document.getElementById('favorite-heart');
         if (isFavorited) {
             heart.classList.add('favorited');
+            
+            // --- NEW LOGIC as requested ---
+            // If it's already in the watchlist, update it with the new values.
+            if (currentStockData && currentStockData.ticker === ticker && currentStockData.dcfValue !== null) {
+                // Update timestamp before saving
+                currentStockData.lastUpdated = new Date().toISOString();
+                
+                // Remove old entry
+                const updatedWatchlist = watchlist.filter(item => item.ticker !== ticker);
+                // Add new, updated entry
+                updatedWatchlist.push(currentStockData);
+                
+                await chrome.storage.local.set({ [WATCHLIST_KEY]: updatedWatchlist });
+                // Show a subtle notification that the background update happened
+                showNotification(`${ticker} data updated in watchlist.`, 'info'); 
+            }
+            // --- END NEW LOGIC ---
+
         } else {
             heart.classList.remove('favorited');
         }
     } catch (e) {
-        console.error("Error checking watchlist status:", e);
+        console.error("Error checking/updating watchlist status:", e);
     }
 }
 
@@ -747,6 +779,145 @@ function displayNews(newsItems) {
     }
 }
 
+// --- NEW: Sector Rotation Logic ---
+
+async function loadSectorRotationData() {
+    const loading = document.getElementById('sectors-loading');
+    const content = document.getElementById('sectors-content');
+    
+    // 1. Check cache
+    let cachedData = null;
+    try {
+        const result = await chrome.storage.local.get(SECTOR_CACHE_KEY);
+        cachedData = result[SECTOR_CACHE_KEY];
+    } catch (e) {
+        console.error("Error loading sector cache:", e);
+    }
+
+    if (cachedData && cachedData.sectorData) {
+        displaySectorRotation(cachedData.sectorData);
+        content.style.display = 'block';
+        loading.style.display = 'none';
+    } else {
+        content.innerHTML = '';
+        content.style.display = 'none';
+        loading.style.display = 'block';
+    }
+
+    // 2. Decide if a fetch is needed
+    const now = new Date().getTime();
+    const lastUpdated = cachedData ? new Date(cachedData.lastUpdated).getTime() : 0;
+    const needsRefresh = (now - lastUpdated > SECTOR_REFRESH_INTERVAL) || !cachedData;
+
+    if (needsRefresh) {
+        if (!cachedData) { // Only show loading spinner if we have NO data at all
+            loading.style.display = 'block';
+            content.style.display = 'none';
+        }
+        
+        // 3. Fetch data
+        chrome.runtime.sendMessage({ action: "getSectorRotation" }, async (response) => {
+            if (chrome.runtime.lastError) {
+                console.error("Error from background:", chrome.runtime.lastError.message);
+                showNotification("Error fetching sector data.", "error");
+                if (!cachedData) {
+                    loading.style.display = 'none';
+                    content.innerHTML = '<p>Error loading sector data.</p>';
+                    content.style.display = 'block';
+                }
+                return;
+            }
+            
+            if (response && response.error) {
+                 showNotification(`Sector Error: ${response.error}`, 'error');
+                 if (!cachedData) {
+                    loading.style.display = 'none';
+                    content.innerHTML = '<p>Error loading sector data.</p>';
+                    content.style.display = 'block';
+                 }
+            } else if (response && response.sectorData) {
+                // SUCCESS!
+                loading.style.display = 'none';
+                content.style.display = 'block';
+                
+                displaySectorRotation(response.sectorData);
+                
+                // Save to cache
+                try {
+                    await chrome.storage.local.set({ 
+                        [SECTOR_CACHE_KEY]: {
+                            lastUpdated: new Date().toISOString(),
+                            sectorData: response.sectorData
+                        } 
+                    });
+                } catch (e) {
+                    console.error("Error saving sector data to cache:", e);
+                }
+                
+                if (!cachedData) {
+                    showNotification('Sector data loaded.', 'success');
+                }
+            } else {
+                showNotification('Could not find sector data.', 'error');
+                if (!cachedData) {
+                    loading.style.display = 'none';
+                    content.innerHTML = '<p>No sector data was found.</p>';
+                    content.style.display = 'block';
+                }
+            }
+        });
+    }
+}
+
+function displaySectorRotation(sectorData) {
+    const content = document.getElementById('sectors-content');
+    
+    // Sort by 55-Day Growth % (descending)
+    try {
+        sectorData.sort((a, b) => b.growth_55_day_pct - a.growth_55_day_pct);
+    } catch (e) {
+        console.error("Could not sort sector data:", e);
+        // Continue with unsorted data
+    }
+
+    let tableHtml = `
+        <table class="sectors-table">
+            <thead>
+                <tr>
+                    <th>Symbol</th>
+                    <th>Current Price</th>
+                    <th>7-Day %</th>
+                    <th>55-Day %</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    for (const item of sectorData) {
+        const g7_pct = (item.growth_7_day_pct * 100).toFixed(1);
+        const g55_pct = (item.growth_55_day_pct * 100).toFixed(1);
+
+        const g7_class = item.growth_7_day_pct >= 0 ? 'sector-growth-positive' : 'sector-growth-negative';
+        const g55_class = item.growth_55_day_pct >= 0 ? 'sector-growth-positive' : 'sector-growth-negative';
+        
+        tableHtml += `
+            <tr>
+                <td>
+                    <b>${item.symbol}</b>
+                    <span class="sector-name">${item.name}</span>
+                </td>
+                <td>$${item.current_price.toFixed(2)}</td>
+                <td><b class="${g7_class}">${g7_pct}%</b></td>
+                <td><b class="${g55_class}">${g55_pct}%</b></td>
+            </tr>
+        `;
+    }
+
+    tableHtml += '</tbody></table>';
+    content.innerHTML = tableHtml;
+}
+
+
 // --- Event Listeners ---
 document.addEventListener('DOMContentLoaded', () => {
     loadApiKeyStatus();
@@ -796,6 +967,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('nav-analysis').addEventListener('click', () => handleNavClick('analysis'));
     document.getElementById('nav-watchlist').addEventListener('click', () => handleNavClick('watchlist'));
     document.getElementById('nav-news').addEventListener('click', () => handleNavClick('news')); // Added
+    document.getElementById('nav-sectors').addEventListener('click', () => handleNavClick('sectors')); // NEW
 
     // --- Heart Icon Listener ---
     document.getElementById('favorite-heart').addEventListener('click', handleFavoriteClick);

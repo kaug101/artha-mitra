@@ -12,6 +12,8 @@
         <button id="nav-analysis" class="nav-btn active">Analysis</button>
         <button id="nav-watchlist" class="nav-btn">Watchlist</button>
         <button id="nav-news" class="nav-btn">News</button>
+        <!-- NEW: Sectors Tab -->
+        <button id="nav-sectors" class="nav-btn">Sectors</button>
     </div>
 
     <!-- Header with Cloud Icon -->
@@ -229,6 +231,19 @@
         
         <div id="news-content" style="display: none;">
             <!-- News items will be populated here by JS -->
+        </div>
+    </div>
+
+    <!-- NEW: Sectors View -->
+    <div id="sectors-view" style="display:none;">
+        <h2>Sectoral Rotation</h2>
+        
+        <div id="sectors-loading" style="display:none; color: orange; padding: 10px; text-align: center;">
+            <p>Gemini is analyzing sector performance...</p>
+        </div>
+        
+        <div id="sectors-content" style="display: none; max-height: 450px; overflow-y: auto;">
+            <!-- Sector rotation table will be populated here by JS -->
         </div>
     </div>
 

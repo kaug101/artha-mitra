@@ -30,9 +30,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         handleValuation(request.ticker).then(sendResponse);
         return true; // Keep message channel open for async response
     }
-    // NEW: Add listener for news
+    
     if (request.action === "getNews") {
         handleNewsRequest(request.timeframe).then(sendResponse);
+        return true; // Keep message channel open for async response
+    }
+    
+    // NEW: Add listener for sector rotation
+    if (request.action === "getSectorRotation") {
+        handleSectorRotation().then(sendResponse);
         return true; // Keep message channel open for async response
     }
     return true;
@@ -68,17 +74,21 @@ async function fetchWithRetry(apiKey, endpoint, payload) {
                 }
                 
                 const rawText = data.candidates[0].content.parts[0].text;
-                // Look for JSON, which might be wrapped in markdown
-                const jsonMatch = rawText.match(/\{[\s\S]*\}/); 
+                
+                // --- FIX: Changed regex to be NON-GREEDY (using *?) ---
+                // This finds the *first* JSON object, not the longest match.
+                const jsonMatch = rawText.match(/\{[\s\S]*?\}/); 
                 if (!jsonMatch) {
                     // Fallback for simple JSON array
-                    const jsonArrayMatch = rawText.match(/\[[\s\S]*\]/);
+                    // --- FIX: Changed regex to be NON-GREEDY (using *?) ---
+                    // This finds the *first* JSON array, not the longest match.
+                    const jsonArrayMatch = rawText.match(/\[[\s\S]*?\]/);
                     if (!jsonArrayMatch) {
                         throw new Error("Could not find a valid JSON object or array in the model's response.");
                     }
-                    return jsonArrayMatch[0]; // Return the JSON array string
+                    return jsonArrayMatch[0]; // Return the first JSON array string
                 }
-                return jsonMatch[0]; // Return the JSON object string
+                return jsonMatch[0]; // Return the first JSON object string
             }
 
             // --- RETRYABLE SERVER ERROR (like 500, 503, 504, or 429) ---
@@ -199,7 +209,8 @@ To populate the values, follow this methodology:
     * **NEW**: Also populate "swotAnalysis" with a brief fundamental SWOT.
 `;
 
-    const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+    // UPDATED Endpoint
+    const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
     
     const payload = {
         contents: [{ parts: [{ text: userPrompt }] }],
@@ -249,7 +260,7 @@ You must use your search tools to find real-time, relevant news.
 For each news item, provide:
 1.  A brief 1-2 sentence summary.
 2.  The source (e.g., Bloomberg, Reuters).
-3.  The exact date and time of the article in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ).
+3.  The publication date and time as a string (e.g., "October 26, 2025, 10:30 AM" or "2025-10-26T10:30:00Z"). Provide the most precise timestamp you can find.
 4.  A maximum of 3 key specific stocks (with tickers) that are most affected.
 
 Your entire response MUST be a single, validated JSON object. Do not include any text, markdown, or commentary before or after the JSON object.
@@ -261,7 +272,7 @@ The JSON object must follow this exact structure:
       "headline": "Example: Fed Hints at Earlier-Than-Expected Rate Cuts",
       "summary": "Summary of the news item, explaining what happened and why it matters.",
       "source": "Reputable news source (e.g., Bloomberg, Reuters, WSJ)",
-      "datetime": "2025-10-26T10:30:00Z",
+      "datetime": "October 26, 2025, 10:30 AM",
       "affectedAssets": [
         { "name": "US Technology Sector", "ticker": null },
         { "name": "Gold", "ticker": "GLD" },
@@ -273,7 +284,8 @@ The JSON object must follow this exact structure:
 `;
     // --- END UPDATED PROMPT ---
 
-    const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+    // UPDATED Endpoint
+    const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
     
     const payload = {
         contents: [{ parts: [{ text: newsPrompt }] }],
@@ -304,5 +316,72 @@ The JSON object must follow this exact structure:
     } catch (error) {
         console.error(`Global news fetch failed:`, error);
         return { error: `Failed to get news. ${error.message}` };
+    }
+}
+
+// --- NEW: 5. Gemini-Powered Sector Rotation Fetch ---
+async function handleSectorRotation() {
+    const apiKey = await getGeminiApiKey();
+    if (!apiKey) {
+        return { error: "Gemini API Key not found. Please add it via the cloud icon in the popup." };
+    }
+
+    const sectorPrompt = `
+You are a financial data analyst. Your task is to perform a historical price analysis for the following 11 US sector ETFs:
+XLK, XLV, XLF, XLY, XLC, XLI, XLP, XLE, XLU, XLRE, XLB.
+
+You must use your search tools to find the requested price data.
+- "Current Price" should be the last market close.
+- "Price 7 Days Ago" should be the closing price from the nearest prior trading day if 7 days ago was a non-trading day.
+- "Price 55 Days Ago" should be the closing price from the nearest prior trading day if 55 days ago was a non-trading day.
+
+Calculate the 7-Day and 55-Day growth percentages based on these prices.
+
+Your entire response MUST be a single, validated JSON array. Do not include any text, markdown, or commentary before or after the JSON.
+
+The JSON array must contain exactly 11 objects, one for each symbol. Each object must follow this exact structure:
+{
+  "symbol": "XLK",
+  "name": "Technology Select Sector SPDR Fund",
+  "price_55_days_ago": 0.0,
+  "price_7_days_ago": 0.0,
+  "current_price": 0.0,
+  "growth_7_day_pct": 0.0,
+  "growth_55_day_pct": 0.0
+}
+
+Populate this structure for all 11 symbols. The 'name' field must be the full name of the ETF. 'growth_7_day_pct' and 'growth_55_day_pct' should be in decimal format (e.g., 5.5% = 0.055).
+`;
+
+    // UPDATED Endpoint
+    const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
+    
+    const payload = {
+        contents: [{ parts: [{ text: sectorPrompt }] }],
+        tools: [{ "google_search": {} }],
+        generationConfig: {
+            temperature: 0.1
+        }
+    };
+
+    try {
+        const rawJsonString = await fetchWithRetry(apiKey, GEMINI_CLOUD_ENDPOINT, payload);
+        const sectorData = JSON.parse(rawJsonString); // This should be an array
+
+        // Validate the structure
+        if (!Array.isArray(sectorData)) {
+             throw new Error("The parsed JSON is not an array as expected.");
+        }
+
+        if (sectorData.length === 0 || typeof sectorData[0].current_price !== 'number' || typeof sectorData[0].growth_7_day_pct !== 'number') {
+            throw new Error("The parsed JSON array does not match the expected sector data structure.");
+        }
+        
+        // Wrap in an object for consistent response handling in popup.js
+        return { sectorData: sectorData }; 
+
+    } catch (error) {
+        console.error(`Sector rotation fetch failed:`, error);
+        return { error: `Failed to get sector data. ${error.message}` };
     }
 }

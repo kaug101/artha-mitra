@@ -45,11 +45,11 @@ body {
 }
 
 .nav-btn {
-    padding: 8px 16px;
+    padding: 8px 12px; /* Adjusted padding for 4 tabs */
     cursor: pointer;
     background-color: transparent;
     border: none;
-    font-size: 1em;
+    font-size: 0.9em; /* Slightly smaller font */
     color: #555;
     border-bottom: 3px solid transparent;
     transition: all 0.2s;
@@ -486,6 +486,63 @@ h2, h3, h4 {
     background-color: #0056b3;
 }
 /* --- End News View --- */
+
+/* --- NEW: Sector Rotation View Styles --- */
+#sectors-view h2 {
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 5px;
+}
+
+.sectors-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85em;
+}
+
+.sectors-table th,
+.sectors-table td {
+    padding: 8px 4px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.sectors-table th {
+    background-color: #f0f4f8;
+    font-weight: bold;
+    position: sticky;
+    top: 0;
+}
+
+/* Right-align number columns */
+.sectors-table th:nth-child(3), .sectors-table td:nth-child(3),
+.sectors-table th:nth-child(4), .sectors-table td:nth-child(4),
+.sectors-table th:nth-child(5), .sectors-table td:nth-child(5) {
+    text-align: right;
+}
+
+/* Monospace font for numbers */
+.sectors-table td:nth-child(3),
+.sectors-table td:nth-child(4),
+.sectors-table td:nth-child(5) {
+    font-family: 'Courier New', Courier, monospace;
+}
+
+.sector-name {
+    font-size: 0.9em;
+    color: #555;
+    display: block;
+}
+
+.sector-growth-positive {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.sector-growth-negative {
+    color: #dc3545;
+    font-weight: bold;
+}
+/* --- End Sector Rotation Styles --- */
 
 
 /* Modal Styles */
