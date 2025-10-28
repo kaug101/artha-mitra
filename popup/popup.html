@@ -19,7 +19,7 @@
     <!-- Header with Cloud Icon -->
     <div class="header-container">
         <h1>Artha-Mitra</h1>
-        <svg id="cloudKeyIcon" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+        <svg id="cloudKeyIcon" xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
     </div>
 
     <!-- Analysis View Wrapper -->
@@ -43,13 +43,19 @@
                     <p id="priceInfo" style="margin-top: 2px; font-size: 0.9em;"></p>
                 </div>
                 <!-- NEW: Heart Icon -->
-                <svg id="favorite-heart" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="heart-icon" style="display:none;">
+                <svg id="favorite-heart" xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="heart-icon" style="display:none;">
                     <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
                 </svg>
             </div>
 
+            <!-- NEW: Investment Strategy Display -->
+            <div id="strategy-display" style="background-color: #f0f4f8; padding: 10px; border-radius: 4px; margin-top: 10px; border-left: 3px solid #007bff; display:none;">
+                <h4 style="margin: 0 0 5px 0;">Recommended Strategy</h4>
+                <strong id="strategy-value" style="font-size: 1.1em; color: #0056b3;"></strong>
+            </div>
+
             <!-- DCF Input Parameters -->
-            <div id="dcf-inputs">
+            <div id="dcf-inputs" style="margin-top: 10px;">
                 
                 <!-- UFCF Components -->
                 <h4 class="param-header">UFCF Components (TTM, in Millions)</h4>
@@ -177,6 +183,10 @@
                     <h5>Fundamental SWOT</h5>
                     <pre id="rationale-swot"></pre>
 
+                    <!-- NEW: Investment Strategy Rationale -->
+                    <h5>Recommended Strategy</h5>
+                    <pre id="rationale-strategy"></pre>
+
                     <h5>UFCF Components & Growth</h5>
                     <pre id="rationale-ufcf"></pre>
             
@@ -236,10 +246,16 @@
 
     <!-- NEW: Sectors View -->
     <div id="sectors-view" style="display:none;">
-        <h2>Sectoral Rotation</h2>
         
+        <!-- UPDATED: Header with status icon -->
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+            <h2 style="border-bottom: none; padding-bottom: 0;">Sectoral Rotation</h2>
+            <!-- NEW: Sector Status Icon -->
+            <div id="sector-status-icon" title="Sector data status"></div>
+        </div>
+
         <div id="sectors-loading" style="display:none; color: orange; padding: 10px; text-align: center;">
-            <p>Gemini is analyzing sector performance...</p>
+            <p>Fetching sector performance from Alpha Vantage...</p>
         </div>
         
         <div id="sectors-content" style="display: none; max-height: 450px; overflow-y: auto;">
@@ -252,11 +268,20 @@
     <div id="apiKeyModal" class="modal-container">
         <div class="modal-content">
             <span class="close-button">&times;</span>
-            <h4>Hybrid AI Setup (API Key)</h4>
+            
+            <!-- UPDATED: Gemini Key Section -->
+            <h4>Gemini (AI Analysis)</h4>
             <p>Enter your Gemini Cloud API key to enable the analysis models.</p>
             <input type="password" id="geminiApiKeyInput" placeholder="Enter Gemini Cloud API Key">
-            <button id="saveApiKeyButton" class="prompt-button" style="background-color: #007bff; margin-top: 5px;">Save Key</button>
+            <button id="saveApiKeyButton">Save Gemini Key</button>
             <p id="keyStatus" style="font-size: 0.8em; margin-top: 5px;"></p>
+            
+            <!-- NEW: Alpha Vantage Key Section -->
+            <h4 style="margin-top: 15px;">Alpha Vantage (Stock Data)</h4>
+            <p>Enter your free Alpha Vantage API key for sector analysis.</p>
+            <input type="password" id="alphaVantageApiKeyInput" placeholder="Enter Alpha Vantage API Key">
+            <button id="saveAlphaVantageApiKeyButton">Save Alpha Vantage Key</button>
+            <p id="alphaVantageKeyStatus" style="font-size: 0.8em; margin-top: 5px;"></p>
         </div>
     </div>
 

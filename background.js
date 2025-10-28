@@ -36,9 +36,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true; // Keep message channel open for async response
     }
     
-    // NEW: Add listener for sector rotation
+    // UPDATED: Call new Alpha Vantage function
     if (request.action === "getSectorRotation") {
-        handleSectorRotation().then(sendResponse);
+        handleSectorRotationAlphaVantage().then(sendResponse);
         return true; // Keep message channel open for async response
     }
     return true;
@@ -50,6 +50,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 async function getGeminiApiKey() {
     const result = await chrome.storage.local.get('geminiCloudApiKey');
     return result.geminiCloudApiKey;
+}
+
+// NEW: Get Alpha Vantage API Key
+async function getAlphaVantageApiKey() {
+    const result = await chrome.storage.local.get('alphaVantageApiKey');
+    return result.alphaVantageApiKey;
 }
 
 // Re-usable retry logic for Gemini API calls
@@ -147,7 +153,7 @@ async function handleValuation(ticker) {
         return { error: "Gemini API Key not found. Please add it via the cloud icon in the popup." };
     }
 
-    // --- REVISED PROMPT (Added analystConsensus, sectoralMegatrends, swotAnalysis) ---
+    // --- REVISED PROMPT (Added investmentStrategy) ---
     const userPrompt = `
 You are acting as a prudent, neutral financial analyst. Your task is to fetch the key parameters required for a detailed Discounted Cash Flow (DCF) valuation for the company with ticker: "${ticker}".
 You must use the most current, real-time data available from your search tools.
@@ -165,6 +171,7 @@ The JSON object must follow this exact structure:
   "ticker": "${ticker}",
   "latestPrice": 0.0,
   "priceDate": "YYYY-MM-DD",
+  "investmentStrategy": "Growth | Value | Dividend | Passive | Other",
   "dcfParameters": {
     "ttmNopat": 0.0,
     "ttmDepreciationAndAmortization": 0.0,
@@ -186,6 +193,7 @@ The JSON object must follow this exact structure:
     "target_12m": 0.0
   },
   "rationale": {
+    "investmentStrategy": "Rationale for the recommended investment strategy based on the company's profile.",
     "ufcfComponents": "Rationale for TTM NOPAT, D&A, CapEx, and Change in NWC. CapEx should be positive.",
     "ufcfGrowthRate": "Rationale for the 5-year UFCF growth rate.",
     "waccComponents": "Rationale for Market Value of Equity, Market Value of Debt, Cost of Equity (Re), Cost of Debt (Rd), and Corporate Tax Rate (t).",
@@ -200,8 +208,9 @@ The JSON object must follow this exact structure:
 \\\`\`\`
 
 To populate the values, follow this methodology:
-1.  Fetch the "latestPrice" and "priceDate".
-2.  Populate "dcfParameters":
+1.  Determine and populate "investmentStrategy": Recommend a primary strategy (e.g., "Growth", "Value", "Dividend") that suits this stock and provide a rationale.
+2.  Fetch the "latestPrice" and "priceDate".
+3.  Populate "dcfParameters":
     * "ttmNopat": Trailing Twelve Months Net Operating Profit After Tax.
     * "ttmDepreciationAndAmortization": TTM D&A.
     * "ttmCapitalExpenditures": TTM CapEx (Note: This should be a positive number, e.g., 1000, not -1000, as the formula will subtract it).
@@ -215,22 +224,21 @@ To populate the values, follow this methodology:
     * "netDebt": Most recent total Net Debt (Total Debt - Cash & Equivalents).
     * "sharesOutstanding": Latest shares outstanding.
     * "perpetualGrowthRate": Assume a reasonable terminal growth rate, typically between 2-3%.
-3.  Populate "analystConsensus":
+4.  Populate "analystConsensus":
     * Fetch the 3-month, 6-month, and 12-month analyst consensus price targets.
-4.  Populate "rationale": For each group of parameters, provide a brief (1-2 sentence) justification for the values.
+5.  Populate "rationale": For each group of parameters, provide a brief (1-2 sentence) justification for the values.
     * **NEW**: Also populate "sectoralMegatrends" with key trends for the company's industry.
     * **NEW**: Also populate "swotAnalysis" with a brief fundamental SWOT.
 `;
 
-    // FIX: Removed Markdown formatting from the URL string.
-    const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
+    // SYNTAX FIX: Removed markdown link from URL string
+    const GEMINI_CLOUD_ENDPOINT = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent)";
     
     const payload = {
         contents: [{ parts: [{ text: userPrompt }] }],
         tools: [{ "google_search": {} }],
         generationConfig: {
             temperature: 0.1
-            // REMOVED: responseMimeType: "application/json" // This caused the 400 error with tools
         }
     };
 
@@ -238,15 +246,17 @@ To populate the values, follow this methodology:
         const rawJsonString = await fetchWithRetry(apiKey, GEMINI_CLOUD_ENDPOINT, payload);
         const result = JSON.parse(rawJsonString);
 
+        // VALIDATION UPDATE: Check for new investmentStrategy field
         if (
             !result ||
             typeof result.latestPrice !== 'number' ||
+            typeof result.investmentStrategy !== 'string' || // Added check
             !result.dcfParameters ||
             !result.rationale ||
             !result.analystConsensus ||
             typeof result.dcfParameters.ttmNopat !== 'number' ||
             typeof result.dcfParameters.costOfEquity !== 'number' ||
-            typeof result.analystConsensus.target_12m !== 'number' // Corrected this line
+            typeof result.analystConsensus.target_12m !== 'number'
         ) {
             throw new Error("The parsed JSON does not match the expected DCF parameter structure.");
         }
@@ -259,14 +269,13 @@ To populate the values, follow this methodology:
     }
 }
 
-// --- NEW: 4. Gemini-Powered News Fetch ---
+// --- 4. Gemini-Powered News Fetch ---
 async function handleNewsRequest(timeframe) {
     const apiKey = await getGeminiApiKey();
     if (!apiKey) {
         return { error: "Gemini API Key not found. Please add it via the cloud icon in the popup." };
     }
 
-    // --- UPDATED PROMPT ---
     const newsPrompt = `
 You are a financial news analyst. Your task is to find the "Top 10" most impactful global financial or economic news stories from the specified timeframe: "${timeframe}".
 You must use your search tools to find real-time, relevant news.
@@ -289,7 +298,7 @@ The JSON object must follow this exact structure:
       "summary": "Summary of the news item, explaining what happened and why it matters.",
       "source": "Reputable news source (e.g., Bloomberg, Reuters, WSJ)",
       "datetime": "October 26, 2025, 10:30 AM",
-      "sourceUrl": "https://www.bloomberg.com/example-article-path",
+      "sourceUrl": "[https://www.bloomberg.com/example-article-path](https://www.bloomberg.com/example-article-path)",
       "affectedAssets": [
         { "name": "US Technology Sector", "ticker": null },
         { "name": "Gold", "ticker": "GLD" },
@@ -304,18 +313,15 @@ To populate this JSON:
 - For "affectedAssets", if you find more than one, ensure they are in a JSON array, with each object separated by a comma.
 - Ensure all strings are properly escaped.
 `;
-    // --- END UPDATED PROMPT ---
 
-    // FIX: Removed Markdown formatting from the URL string.
-    const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
+    // SYNTAX FIX: Removed markdown link from URL string
+    const GEMINI_CLOUD_ENDPOINT = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent)";
     
     const payload = {
-        // FIX: Changed userPrompt to newsPrompt
         contents: [{ parts: [{ text: newsPrompt }] }],
         tools: [{ "google_search": {} }],
         generationConfig: {
             temperature: 0.2
-            // REMOVED: responseMimeType: "application/json" // This caused the 400 error with tools
         }
     };
 
@@ -328,13 +334,10 @@ To populate this JSON:
              throw new Error("The parsed JSON does not match the expected news structure (missing newsItems array).");
         }
         
-        // Optional: Validate first item for new field
         if (result.newsItems.length > 0) {
             if (typeof result.newsItems[0].datetime !== 'string') {
                 console.warn("Gemini response news item is missing 'datetime' string field.");
-                // Don't throw an error, just warn, in case model fails
             }
-            // MODIFICATION: Check for sourceUrl
             if (typeof result.newsItems[0].sourceUrl !== 'string') {
                 console.warn("Gemini response news item is missing 'sourceUrl' string field.");
             }
@@ -342,80 +345,180 @@ To populate this JSON:
         
         return result; // Success
 
-    } catch (error) { // FIX: Removed the stray 'Copy' identifier here
+    } catch (error) { 
         console.error(`Global news fetch failed:`, error);
         return { error: `Failed to get news. ${error.message}` };
     }
 }
 
-// --- NEW: 5. Gemini-Powered Sector Rotation Fetch ---
-async function handleSectorRotation() {
-    const apiKey = await getGeminiApiKey();
-    if (!apiKey) {
-        return { error: "Gemini API Key not found. Please add it via the cloud icon in the popup." };
-    }
+// --- NEW: 5. Alpha Vantage-Powered Sector Rotation Fetch ---
 
-    const sectorPrompt = `
-You are a financial data analyst. Your task is to perform a historical price analysis for the following 11 US sector ETFs:
-XLK, XLV, XLF, XLY, XLC, XLI, XLP, XLE, XLU, XLRE, XLB.
+const ETF_NAMES = {
+    "XLK": "Technology Select Sector SPDR Fund",
+    "XLV": "Health Care Select Sector SPDR Fund",
+    "XLF": "Financial Select Sector SPDR Fund",
+    "XLY": "Consumer Discretionary Select Sector SPDR Fund",
+    "XLC": "Communication Services Select Sector SPDR Fund",
+    "XLI": "Industrial Select Sector SPDR Fund",
+    "XLP": "Consumer Staples Select Sector SPDR Fund",
+    "XLE": "Energy Select Sector SPDR Fund",
+    "XLU": "Utilities Select Sector SPDR Fund",
+    "XLRE": "Real Estate Select Sector SPDR Fund",
+    "XLB": "Materials Select Sector SPDR Fund"
+};
+const SYMBOLS = Object.keys(ETF_NAMES);
 
-You must use your search tools to find the requested price data.
-- "Current Price" should be the last market close.
-- "Price 7 Days Ago" should be the closing price from the nearest prior trading day if 7 days ago was a non-trading day.
-- "Price 55 Days Ago" should be the closing price from the nearest prior trading day if 55 days ago was a non-trading day.
-
-Calculate the 7-Day and 55-Day growth percentages based on these prices.
-
-Your entire response MUST be a single, validated JSON object. Do not include any text, markdown, or commentary before or after the JSON.
-
-The JSON object must follow this exact structure:
-{
-  "sectorData": [
-    {
-      "symbol": "XLK",
-      "name": "Technology Select Sector SPDR Fund",
-      "price_55_days_ago": 0.0,
-      "price_7_days_ago": 0.0,
-      "current_price": 0.0,
-      "growth_7_day_pct": 0.0,
-      "growth_55_day_pct": 0.0
-    }
-  ]
-}
-
-Populate the "sectorData" array with exactly 11 objects, one for each symbol listed above. The 'name' field must be the full name of the ETF. 'growth_7_day_pct' and 'growth_55_day_pct' should be in decimal format (e.g., 5.5% = 0.055).
-`;
-
-    // FIX: Removed Markdown formatting from the URL string.
-    const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
+// Helper function to find the closest prior trading day's price
+function getPriceFromSeries(timeSeries, daysAgo) {
+    if (!timeSeries) return null;
     
-    const payload = {
-        // FIX: Changed userPrompt to sectorPrompt
-        contents: [{ parts: [{ text: sectorPrompt }] }],
-        tools: [{ "google_search": {} }],
-        generationConfig: {
-            temperature: 0.1
-            // NOTE: No JSON mime type here, as the handler for this
-            // in popup.js (displaySectorRotation) is designed
-            // to display the raw string. This is correct.
-        }
-    };
+    // Get all available dates and sort them descending (most recent first)
+    const dates = Object.keys(timeSeries).sort((a, b) => new Date(b) - new Date(a));
+    
+    if (dates.length === 0) return null;
+    
+    const latestDate = new Date(dates[0] + 'T00:00:00'); // Ensure local timezone interpretation
 
-    try {
-        const rawJsonString = await fetchWithRetry(apiKey, GEMINI_CLOUD_ENDPOINT, payload);
-        
-        // --- START MODIFICATION ---
-        // User requested to display raw data, so we don't parse it here.
-        // We just return the raw JSON string.
-        
-        // Return the raw string, but keep the object structure for popup.js
-        return { sectorData: rawJsonString };
-        // --- END MODIFICATION ---
-
-    } catch (error) {
-        console.error(`Sector rotation fetch failed:`, error);
-        return { error: `Failed to get sector data. ${error.message}` };
+    if (daysAgo === 0) {
+        // --- FIX: Use '4. close' ---
+        return parseFloat(timeSeries[dates[0]]['4. close']);
     }
+
+    // Calculate the target date
+    const targetDate = new Date(latestDate);
+    targetDate.setDate(targetDate.getDate() - daysAgo);
+    
+    // Find the closest trading day *on or before* the target date
+    // We convert date strings to YYYY-MM-DD format for comparison
+    const targetDateString = targetDate.toISOString().split('T')[0];
+    
+    let bestDate = dates.find(date => date <= targetDateString);
+
+    if (!bestDate) {
+        // If no date is on or before (e.g., target is before earliest data),
+        // fallback to the oldest data we have.
+        bestDate = dates[dates.length - 1]; 
+    }
+    
+    // --- FIX: Use '4. close' ---
+    return parseFloat(timeSeries[bestDate]['4. close']);
 }
 
+async function handleSectorRotationAlphaVantage() {
+    const apiKey = await getAlphaVantageApiKey();
+    if (!apiKey) {
+        return { error: "Alpha Vantage API Key not found. Please add it via the cloud icon in the popup." };
+    }
 
+    let sectorData = [];
+    let apiError = null;
+
+    for (const symbol of SYMBOLS) {
+        const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=compact&apikey=${apiKey}`;
+        
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`API request failed with status ${response.status}`);
+            }
+            
+            const data = await response.json();
+
+            // Check for API rate limit error
+            if (data['Note'] && data['Note'].includes('API call frequency')) {
+                console.warn(`Alpha Vantage Rate Limit hit for ${symbol}. Waiting 15 seconds...`);
+                await new Promise(resolve => setTimeout(resolve, 15000)); // Wait 15s
+                
+                // Retry this symbol
+                const retryResponse = await fetch(url);
+                const retryData = await retryResponse.json();
+                
+                if (retryData['Note']) {
+                     throw new Error('Alpha Vantage API rate limit hit on retry. Aborting.');
+                }
+                // Continue processing with retryData
+                processData(retryData, symbol);
+
+            } else if (data['Time Series (Daily)']) {
+                processData(data, symbol);
+            } else {
+                console.warn(`No 'Time Series (Daily)' data for ${symbol}. Response:`, data);
+                // Add placeholder to show it was tried but failed
+                sectorData.push({
+                    symbol: symbol,
+                    name: ETF_NAMES[symbol] || symbol,
+                    price_55_days_ago: 0,
+                    price_7_days_ago: 0,
+                    current_price: 0,
+                    growth_7_day_pct: 0,
+                    growth_55_day_pct: 0
+                });
+            }
+
+        } catch (error) {
+            console.error(`Failed to fetch data for ${symbol}:`, error);
+            apiError = error.message;
+            // Don't stop the whole loop, just skip this symbol
+             sectorData.push({
+                symbol: symbol,
+                name: ETF_NAMES[symbol] || symbol,
+                price_55_days_ago: 0,
+                price_7_days_ago: 0,
+                current_price: 0,
+                growth_7_day_pct: 0,
+                growth_55_day_pct: 0
+            });
+        }
+        
+        // --- Add a delay BETWEEN calls to respect free tier limits (5 calls/min) ---
+        // 13 seconds is safe (60s / 5 = 12s per call)
+        if (SYMBOLS.indexOf(symbol) < SYMBOLS.length - 1) { // Don't wait after the last one
+             await new Promise(resolve => setTimeout(resolve, 13000));
+        }
+    }
+
+    // Helper to process the data and push to array
+    function processData(data, symbol) {
+        const series = data['Time Series (Daily)'];
+        
+        const currentPrice = getPriceFromSeries(series, 0);
+        const price7DaysAgo = getPriceFromSeries(series, 7);
+        const price55DaysAgo = getPriceFromSeries(series, 55);
+
+        if (currentPrice === null || price7DaysAgo === null || price55DaysAgo === null) {
+            console.warn(`Could not find all required dates for ${symbol}`);
+            sectorData.push({
+                symbol: symbol,
+                name: ETF_NAMES[symbol] || symbol,
+                price_55_days_ago: price55DaysAgo || 0,
+                price_7_days_ago: price7DaysAgo || 0,
+                current_price: currentPrice || 0,
+                growth_7_day_pct: 0,
+                growth_55_day_pct: 0
+            });
+            return;
+        }
+
+        const growth7Day = (currentPrice / price7DaysAgo) - 1;
+        const growth55Day = (currentPrice / price55DaysAgo) - 1;
+
+        sectorData.push({
+            symbol: symbol,
+            name: ETF_NAMES[symbol] || symbol,
+            price_55_days_ago: price55DaysAgo,
+            price_7_days_ago: price7DaysAgo,
+            current_price: currentPrice,
+            growth_7_day_pct: growth7Day,
+            growth_55_day_pct: growth55Day
+        });
+    }
+
+
+    if (apiError && sectorData.length === 0) {
+        // If we had an error and got NO data
+        return { error: apiError };
+    }
+    
+    // Return the data, even if it's partial
+    return { sectorData: sectorData };
+}

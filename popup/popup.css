@@ -505,9 +505,30 @@ h2, h3, h4 {
 
 /* --- NEW: Sector Rotation View Styles --- */
 #sectors-view h2 {
-    border-bottom: 2px solid #007bff;
-    padding-bottom: 5px;
+    /* border-bottom: 2px solid #007bff; */ /* Removed border for wrapper */
+    /* padding-bottom: 5px; */
 }
+
+/* --- NEW: Sector Status Icon Styles --- */
+#sector-status-icon {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #dc3545; /* Default to Red (old) */
+    transition: background-color 0.3s;
+    margin-right: 5px; /* Add some spacing */
+    flex-shrink: 0;
+}
+
+#sector-status-icon.status-updating {
+    background-color: #ffc107; /* Orange (updating) */
+    animation: pulse 1.5s infinite;
+}
+
+#sector-status-icon.status-updated {
+    background-color: #28a745; /* Green (up-to-date) */
+}
+/* --- End Sector Status Icon Styles --- */
 
 .sectors-table {
     width: 100%;
@@ -576,11 +597,11 @@ h2, h3, h4 {
 
 .modal-content {
     background-color: #fefefe;
-    margin: 25% auto; /* Centered */
+    margin: 20% auto; /* Updated margin */
     padding: 20px;
     border: 1px solid #888;
     width: 90%;
-    max-width: 320px;
+    max-width: 340px; /* Slightly wider for new inputs */
     border-radius: 8px;
     position: relative;
     box-shadow: 0 4px 8px rgba(0,0,0,0.2);
@@ -600,4 +621,40 @@ h2, h3, h4 {
     color: black;
     text-decoration: none;
     cursor: pointer;
+}
+
+/* UPDATED: Modal inputs and buttons */
+.modal-content input[type="password"] {
+    width: calc(100% - 20px);
+    padding: 8px 10px;
+    margin-top: 5px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.modal-content button {
+    width: 100%;
+    padding: 8px;
+    margin-top: 10px;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+
+/* Specific colors for buttons */
+#saveApiKeyButton { 
+    background-color: #007bff; 
+}
+#saveApiKeyButton:hover { 
+    background-color: #0056b3; 
+}
+
+#saveAlphaVantageApiKeyButton { 
+    background-color: #28a745; 
+}
+#saveAlphaVantageApiKeyButton:hover { 
+    background-color: #218838; 
 }

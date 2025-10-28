@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Artha-Mitra: AI Stock Valuation Expert",
-  "version": "1.3",
+  "version": "1.4",
   "description": "AI-driven stock analysis with DCF, market intelligence, and Gemini capabilities.",
   "action": {
     "default_icon": {
@@ -16,7 +16,8 @@
     "windows"
   ],
   "host_permissions": [
-    "https://generativelanguage.googleapis.com/"
+    "https://generativelanguage.googleapis.com/",
+    "https://www.alphavantage.co/"
   ],
   "background": {
     "service_worker": "background.js"

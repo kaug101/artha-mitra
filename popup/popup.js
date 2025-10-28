@@ -1,6 +1,7 @@
 // popup.js
 
 const API_KEY_STORAGE_KEY = 'geminiCloudApiKey';
+const ALPHA_VANTAGE_API_KEY_STORAGE_KEY = 'alphaVantageApiKey'; // NEW
 const WATCHLIST_KEY = 'watchlistStocks'; // Key for watchlist
 const NEWS_CACHE_KEY = 'newsCache'; // NEW: Key for caching news
 const SECTOR_CACHE_KEY = 'sectorRotationCache'; // NEW: Key for caching sectors
@@ -11,8 +12,8 @@ const NEWS_REFRESH_RULES = {
     "7 days": 24 * 60 * 60 * 1000,  // 24 hours
     "3 months": 7 * 24 * 60 * 60 * 1000 // 7 days
 };
-// NEW: Refresh interval for sector data
-const SECTOR_REFRESH_INTERVAL = 4 * 60 * 60 * 1000; // 4 hours
+// UPDATED: Refresh interval for sector data (24 hours)
+const SECTOR_REFRESH_INTERVAL = 24 * 60 * 60 * 1000; 
 
 // Stores data for the *currently* analyzed stock
 let currentStockData = null; 
@@ -40,30 +41,66 @@ function showNotification(message, type = 'info') {
 }
 
 
-// --- Function to Load Gemini Key Status ---
+// --- UPDATED: Function to Load API Key Statuses ---
 async function loadApiKeyStatus() {
-    const statusElement = document.getElementById('keyStatus');
-    const inputElement = document.getElementById('geminiApiKeyInput');
+    // Gemini Elements
+    const geminiStatusElement = document.getElementById('keyStatus');
+    const geminiInputElement = document.getElementById('geminiApiKeyInput');
+    
+    // Alpha Vantage Elements
+    const avStatusElement = document.getElementById('alphaVantageKeyStatus');
+    const avInputElement = document.getElementById('alphaVantageApiKeyInput');
+    
+    // Cloud Icon
     const cloudIcon = document.getElementById('cloudKeyIcon');
 
-    try {
-        const result = await chrome.storage.local.get(API_KEY_STORAGE_KEY);
-        const storedKey = result[API_KEY_STORAGE_KEY];
+    let geminiKeyPresent = false;
+    let alphaVantageKeyPresent = false;
 
-        if (storedKey) {
-            statusElement.textContent = 'Status: Cloud API Key is saved.';
-            statusElement.style.color = 'green';
-            inputElement.placeholder = 'Key is saved (Click to update)';
-            cloudIcon.style.stroke = 'green';
+    try {
+        // 1. Check Gemini Key
+        const geminiResult = await chrome.storage.local.get(API_KEY_STORAGE_KEY);
+        const storedGeminiKey = geminiResult[API_KEY_STORAGE_KEY];
+
+        if (storedGeminiKey) {
+            geminiStatusElement.textContent = 'Status: Gemini Key is saved.';
+            geminiStatusElement.style.color = 'green';
+            geminiInputElement.placeholder = 'Key is saved (Click to update)';
+            geminiKeyPresent = true;
         } else {
-            statusElement.textContent = 'Status: Cloud API Key is missing.';
-            statusElement.style.color = 'orange';
-            inputElement.placeholder = 'Enter Gemini Cloud API Key';
-            cloudIcon.style.stroke = 'orange';
+            geminiStatusElement.textContent = 'Status: Gemini Key is missing.';
+            geminiStatusElement.style.color = 'orange';
+            geminiInputElement.placeholder = 'Enter Gemini Cloud API Key';
         }
+        
+        // 2. Check Alpha Vantage Key
+        const avResult = await chrome.storage.local.get(ALPHA_VANTAGE_API_KEY_STORAGE_KEY);
+        const storedAVKey = avResult[ALPHA_VANTAGE_API_KEY_STORAGE_KEY];
+
+        if (storedAVKey) {
+            avStatusElement.textContent = 'Status: Alpha Vantage Key is saved.';
+            avStatusElement.style.color = 'green';
+            avInputElement.placeholder = 'Key is saved (Click to update)';
+            alphaVantageKeyPresent = true;
+        } else {
+            avStatusElement.textContent = 'Status: Alpha Vantage Key is missing.';
+            avStatusElement.style.color = 'orange';
+            avInputElement.placeholder = 'Enter Alpha Vantage API Key';
+        }
+
+        // 3. Update Cloud Icon
+        if (geminiKeyPresent && alphaVantageKeyPresent) {
+            cloudIcon.style.stroke = 'green';
+            cloudIcon.title = "All API keys are configured.";
+        } else {
+            cloudIcon.style.stroke = 'orange';
+            cloudIcon.title = "One or more API keys are missing. Click to configure.";
+        }
+
     } catch (e) {
         console.error("Error loading API key status:", e);
-        statusElement.textContent = 'Error loading key status.';
+        geminiStatusElement.textContent = 'Error loading key status.';
+        avStatusElement.textContent = 'Error loading key status.';
     }
 }
 
@@ -85,6 +122,10 @@ function runTickerAnalysis(ticker) {
     document.getElementById('rationaleSection').style.display = 'none';
     document.getElementById('final-results').style.display = 'none';
     document.getElementById('loading').style.display = 'block';
+
+    // NEW: Reset strategy display
+    document.getElementById('strategy-display').style.display = 'none';
+    document.getElementById('strategy-value').textContent = '';
     
     chrome.runtime.sendMessage({ action: "runValuation", ticker: ticker }, (response) => {
         document.getElementById('loading').style.display = 'none';
@@ -131,12 +172,17 @@ function populateDcfInputs(data) {
     // Set headers
     document.getElementById('stockHeader').textContent = `${data.ticker} - Current: $${data.latestPrice.toFixed(2)}`;
     document.getElementById('priceInfo').textContent = `As of: ${data.priceDate}`;
+
+    // NEW: Populate Investment Strategy
+    document.getElementById('strategy-value').textContent = data.investmentStrategy || 'N/A';
+    document.getElementById('strategy-display').style.display = 'block';
     
     // --- NEW: Store data for watchlist ---
     currentStockData = {
         ticker: data.ticker,
         currentPrice: data.latestPrice,
         priceDate: data.priceDate,
+        investmentStrategy: data.investmentStrategy, // Store strategy
         analystConsensus: data.analystConsensus,
         dcfValue: null, // Will be filled by calculateLocalDcf
         lastUpdated: new Date().toISOString()
@@ -310,6 +356,7 @@ function displayRationaleDetails(rationale) {
 
     document.getElementById('rationale-megatrends').textContent = rationale.sectoralMegatrends || 'N/A';
     document.getElementById('rationale-swot').textContent = rationale.swotAnalysis || 'N/A';
+    document.getElementById('rationale-strategy').textContent = rationale.investmentStrategy || 'N/A'; // NEW
     document.getElementById('rationale-ufcf').textContent = rationale.ufcfComponents + "\n\n" + rationale.ufcfGrowthRate || 'N/A';
     document.getElementById('rationale-wacc').textContent = rationale.waccComponents || 'N/A';
     document.getElementById('rationale-netDebt').textContent = rationale.netDebt || 'N/A';
@@ -428,9 +475,9 @@ async function loadWatchlist() {
                         <b>${item.ticker}</b>
                         <span class="watchlist-date">${updatedDate}</span>
                     </td>
-                    <td>$${item.currentPrice.toFixed(2)}</td>
-                    <td>$${item.dcfValue.toFixed(2)}</td>
-                    <td>$${item.analystConsensus.target_12m.toFixed(2)}</td>
+                    <td>$${(item.currentPrice || 0).toFixed(2)}</td>
+                    <td>$${(item.dcfValue || 0).toFixed(2)}</td>
+                    <td>$${(item.analystConsensus?.target_12m || 0).toFixed(2)}</td>
                     <td>
                         <b class="${upsideClass}">${(item.upside * 100).toFixed(1)}%</b>
                     </td>
@@ -585,7 +632,7 @@ function setNewsStatusIcon(status) { // 'old', 'updating', 'updated'
         icon.title = "News data status: Up to date.";
     } else { // 'old' or default
         // No extra class needed, default is red
-        icon.title = "News data status: Old. Update may be needed.";
+        icon.title = "News data status: Old ( > " + (NEWS_REFRESH_RULES['12 hours']/3600000) + "h).";
     }
 }
 
@@ -793,6 +840,27 @@ function displayNews(newsItems) {
 
 // --- NEW: Sector Rotation Logic ---
 
+// --- NEW: Set Sector Status Icon ---
+function setSectorStatusIcon(status) { // 'old', 'updating', 'updated'
+    const icon = document.getElementById('sector-status-icon');
+    if (!icon) return;
+
+    icon.classList.remove('status-updating', 'status-updated');
+    icon.title = "Sector data status: Unknown";
+
+    if (status === 'updating') {
+        icon.classList.add('status-updating');
+        icon.title = "Sector data status: Updating in background... (This may take ~2 mins)";
+    } else if (status === 'updated') {
+        icon.classList.add('status-updated');
+        icon.title = "Sector data status: Up to date.";
+    } else { // 'old' or default
+        // No extra class needed, default is red
+        icon.title = "Sector data status: Old ( > 24h).";
+    }
+}
+
+
 async function loadSectorRotationData() {
     const loading = document.getElementById('sectors-loading');
     const content = document.getElementById('sectors-content');
@@ -807,13 +875,14 @@ async function loadSectorRotationData() {
     }
 
     if (cachedData && cachedData.sectorData) {
-        displaySectorRotation(cachedData.sectorData);
+        displaySectorRotation(cachedData.sectorData); // Display cached data
         content.style.display = 'block';
         loading.style.display = 'none';
     } else {
         content.innerHTML = '';
         content.style.display = 'none';
         loading.style.display = 'block';
+        setSectorStatusIcon('old'); // No data
     }
 
     // 2. Decide if a fetch is needed
@@ -822,6 +891,7 @@ async function loadSectorRotationData() {
     const needsRefresh = (now - lastUpdated > SECTOR_REFRESH_INTERVAL) || !cachedData;
 
     if (needsRefresh) {
+        setSectorStatusIcon('updating');
         if (!cachedData) { // Only show loading spinner if we have NO data at all
             loading.style.display = 'block';
             content.style.display = 'none';
@@ -834,9 +904,10 @@ async function loadSectorRotationData() {
                 showNotification("Error fetching sector data.", "error");
                 if (!cachedData) {
                     loading.style.display = 'none';
-                    content.innerHTML = '<p>Error loading sector data.</p>';
+                    content.innerHTML = '<p>Error loading sector data. Check console.</p>';
                     content.style.display = 'block';
                 }
+                setSectorStatusIcon('old'); // Failed
                 return;
             }
             
@@ -844,15 +915,16 @@ async function loadSectorRotationData() {
                  showNotification(`Sector Error: ${response.error}`, 'error');
                  if (!cachedData) {
                     loading.style.display = 'none';
-                    content.innerHTML = '<p>Error loading sector data.</p>';
+                    content.innerHTML = `<p>Error loading sector data: ${response.error}</p>`;
                     content.style.display = 'block';
                  }
+                 setSectorStatusIcon('old'); // Failed
             } else if (response && response.sectorData) {
                 // SUCCESS!
                 loading.style.display = 'none';
                 content.style.display = 'block';
                 
-                displaySectorRotation(response.sectorData);
+                displaySectorRotation(response.sectorData); // Display new data
                 
                 // Save to cache
                 try {
@@ -865,6 +937,7 @@ async function loadSectorRotationData() {
                 } catch (e) {
                     console.error("Error saving sector data to cache:", e);
                 }
+                setSectorStatusIcon('updated'); // Success
                 
                 if (!cachedData) {
                     showNotification('Sector data loaded.', 'success');
@@ -876,60 +949,76 @@ async function loadSectorRotationData() {
                     content.innerHTML = '<p>No sector data was found.</p>';
                     content.style.display = 'block';
                 }
+                setSectorStatusIcon('old'); // Failed
             }
         });
+    } else {
+        // Cache is fresh
+        setSectorStatusIcon('updated');
     }
 }
 
-function displaySectorRotation(sectorDataString) { // Renamed param for clarity
+// --- UPDATED: Display Sector Rotation as a Table ---
+function displaySectorRotation(sectorData) { // This is now an array
     const content = document.getElementById('sectors-content');
     
-    // --- START MODIFICATION ---
-    // User requested to display raw data. sectorDataString is the raw JSON string.
-    
-    if (typeof sectorDataString !== 'string' || sectorDataString.trim() === '') {
-        content.innerHTML = '<p>No sector data was returned.</p>';
+    // FIX: Add Array.isArray check to ensure sectorData is an array
+    // before trying to access .length or .forEach
+    if (!sectorData || !Array.isArray(sectorData) || sectorData.length === 0) {
+        content.innerHTML = '<p>No sector data was returned or data was in an unexpected format.</p>';
         return;
     }
 
-    // Try to parse and re-stringify for nice formatting (pretty-print)
-    let formattedDisplay = '';
-    try {
-        const parsedJson = JSON.parse(sectorDataString);
-        // Stringify with 2-space indentation
-        formattedDisplay = JSON.stringify(parsedJson, null, 2); 
-        // Now, escape this formatted string for safe HTML injection
-        formattedDisplay = formattedDisplay
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;");
-    } catch (e) {
-        // If it fails to parse (e.g., it's not JSON), display the raw string.
-        console.warn("Sector data was not valid JSON, displaying as raw text.", e);
-        // Escape HTML to prevent XSS if the string contains < or >
-        formattedDisplay = sectorDataString
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;");
+    // Calculate momentum score and sort
+    sectorData.forEach(item => {
+        // Simple momentum score: 40% 7-day, 60% 55-day
+        // Use (item.growth_7_day_pct || 0) to defend against potential NaN/null
+        item.score = ((item.growth_7_day_pct || 0) * 0.4) + ((item.growth_55_day_pct || 0) * 0.6);
+    });
+
+    // Sort by score, highest first
+    sectorData.sort((a, b) => b.score - a.score);
+
+    // Build HTML table
+    let tableHtml = `
+        <table class="sectors-table">
+            <thead>
+                <tr>
+                    <th>Symbol</th>
+                    <th>Name</th>
+                    <th>Current</th>
+                    <th>7D Price</th>
+                    <th>55D Price</th>
+                    <th>7-Day %</th>
+                    <th>55-Day %</th>
+                    <th>Score</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    for (const item of sectorData) {
+        const growth7Class = (item.growth_7_day_pct || 0) >= 0 ? 'sector-growth-positive' : 'sector-growth-negative';
+        const growth55Class = (item.growth_55_day_pct || 0) >= 0 ? 'sector-growth-positive' : 'sector-growth-negative';
+        const scoreClass = (item.score || 0) >= 0 ? 'sector-growth-positive' : 'sector-growth-negative';
+        
+        // --- FIX: Added (item.field || 0).toFixed(2) to prevent errors on null ---
+        tableHtml += `
+            <tr>
+                <td><b>${item.symbol}</b></td>
+                <td><span class="sector-name">${item.name}</span></td>
+                <td>$${(item.current_price || 0).toFixed(2)}</td>
+                <td>$${(item.price_7_days_ago || 0).toFixed(2)}</td>
+                <td>$${(item.price_55_days_ago || 0).toFixed(2)}</td>
+                <td class="${growth7Class}">${((item.growth_7_day_pct || 0) * 100).toFixed(2)}%</td>
+                <td class="${growth55Class}">${((item.growth_55_day_pct || 0) * 100).toFixed(2)}%</td>
+                <td class="${scoreClass}">${((item.score || 0) * 100).toFixed(2)}</td>
+            </tr>
+        `;
     }
 
-    // Use <pre> tag to respect formatting and newlines
-    // Add some styling to match the <pre> in the rationale section
-    content.innerHTML = `
-        <pre style="
-            background-color: #eee;
-            padding: 10px;
-            border-radius: 4px;
-            white-space: pre-wrap; /* Ensures text wraps */
-            word-wrap: break-word; /* Break long words */
-            font-size: 0.85em;
-            border-left: 3px solid #007bff;
-            margin-top: 5px;
-        ">
-${formattedDisplay}
-        </pre>
-    `;
-    // --- END MODIFICATION ---
+    tableHtml += '</tbody></table>';
+    content.innerHTML = tableHtml;
 }
 
 
@@ -954,7 +1043,7 @@ document.addEventListener('DOMContentLoaded', () => {
         runTickerAnalysis(ticker);
     });
 
-    // --- API Key Save Button ---
+    // --- API Key Save Button (Gemini) ---
     document.getElementById('saveApiKeyButton').addEventListener('click', async () => {
         const inputElement = document.getElementById('geminiApiKeyInput');
         const key = inputElement.value.trim();
@@ -965,8 +1054,23 @@ document.addEventListener('DOMContentLoaded', () => {
             await chrome.storage.local.remove(API_KEY_STORAGE_KEY);
             showNotification('Gemini API Key removed.', 'info');
         }
-        inputElement.value = '';
-        loadApiKeyStatus();
+        inputElement.value = ''; // Clear field
+        loadApiKeyStatus(); // Refresh all key statuses
+    });
+    
+    // --- NEW: API Key Save Button (Alpha Vantage) ---
+    document.getElementById('saveAlphaVantageApiKeyButton').addEventListener('click', async () => {
+        const inputElement = document.getElementById('alphaVantageApiKeyInput');
+        const key = inputElement.value.trim();
+        if (key) {
+            await chrome.storage.local.set({ [ALPHA_VANTAGE_API_KEY_STORAGE_KEY]: key });
+             showNotification('Alpha Vantage APIKey saved successfully!', 'success');
+        } else {
+            await chrome.storage.local.remove(ALPHA_VANTAGE_API_KEY_STORAGE_KEY);
+            showNotification('Alpha Vantage API Key removed.', 'info');
+        }
+        inputElement.value = ''; // Clear field
+        loadApiKeyStatus(); // Refresh all key statuses
     });
 
     // --- Parameter Adjustment Buttons ---
