@@ -144,6 +144,23 @@ function runTickerAnalysis(ticker) {
         return;
     }
 
+    // --- NEW: Asynchronously "warm up" Gemini Nano ---
+    if (isNanoAvailable) {
+        console.log("Warming up Gemini Nano model in background...");
+        // We don't await this. We let it run in the background
+        // while the cloud API call is happening.
+        // We just call createTextSession to force the model
+        // to load into memory. We don't need to store the session.
+        window.ai.createTextSession().then((session) => {
+            console.log("Gemini Nano model is ready.");
+            // We can destroy this session, its purpose was just to load the model.
+            session.destroy(); 
+        }).catch(err => {
+            console.warn("Nano background warm-up failed:", err);
+        });
+    }
+    // --- END NEW ---
+
     // Reset current data and UI
     currentStockData = null;
     document.getElementById('favorite-heart').style.display = 'none';
@@ -732,9 +749,12 @@ ${context}
     loading.style.display = 'block';
     content.style.display = 'none';
     output.textContent = ''; // Clear old content
+    let session = null; // Declare session here
 
     try {
-        const session = await window.ai.createTextSession();
+        // This call will now be fast because the model
+        // was pre-warmed during the runTickerAnalysis step.
+        session = await window.ai.createTextSession();
         const result = await session.prompt(prompt);
         
         output.textContent = result; // Put generated text in <pre>
@@ -747,6 +767,9 @@ ${context}
         content.style.display = 'block';
     } finally {
         loading.style.display = 'none'; // Hide loader
+        if (session) {
+            session.destroy(); // Clean up the session
+        }
     }
 }
 
