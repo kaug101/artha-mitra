@@ -232,7 +232,7 @@ To populate the values, follow this methodology:
 `;
 
     // SYNTAX FIX: Removed markdown link from URL string
-    const GEMINI_CLOUD_ENDPOINT = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent)";
+    const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent";
     
     const payload = {
         contents: [{ parts: [{ text: userPrompt }] }],
