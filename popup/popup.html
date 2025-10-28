@@ -7,19 +7,20 @@
 <body>
     <div id="notification" class="notification-bar" style="display:none;"></div>
 
-    <!-- UPDATED: View Navigation -->
+    <!-- UPDATED: View Navigation (5 tabs) -->
     <div class="view-nav">
         <button id="nav-analysis" class="nav-btn active">Analysis</button>
         <button id="nav-watchlist" class="nav-btn">Watchlist</button>
         <button id="nav-news" class="nav-btn">News</button>
-        <!-- NEW: Sectors Tab -->
         <button id="nav-sectors" class="nav-btn">Sectors</button>
+        <!-- NEW: Strategy Tab -->
+        <button id="nav-strategy" class="nav-btn">Strategy</button>
     </div>
 
     <!-- Header with Cloud Icon -->
     <div class="header-container">
         <h1>Artha-Mitra</h1>
-        <svg id="cloudKeyIcon" xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+        <svg id="cloudKeyIcon" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
     </div>
 
     <!-- Analysis View Wrapper -->
@@ -43,15 +44,23 @@
                     <p id="priceInfo" style="margin-top: 2px; font-size: 0.9em;"></p>
                 </div>
                 <!-- NEW: Heart Icon -->
-                <svg id="favorite-heart" xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="heart-icon" style="display:none;">
+                <svg id="favorite-heart" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="heart-icon" style="display:none;">
                     <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
                 </svg>
             </div>
 
-            <!-- NEW: Investment Strategy Display -->
-            <div id="strategy-display" style="background-color: #f0f4f8; padding: 10px; border-radius: 4px; margin-top: 10px; border-left: 3px solid #007bff; display:none;">
-                <h4 style="margin: 0 0 5px 0;">Recommended Strategy</h4>
-                <strong id="strategy-value" style="font-size: 1.1em; color: #0056b3;"></strong>
+            <!-- UPDATED: Investment Strategy Display with Explain Icon -->
+            <div id="strategy-display" style="background-color: #f0f4f8; padding: 10px; border-radius: 4px; margin-top: 10px; border-left: 3px solid #007bff; display:none; align-items: center; justify-content: space-between;">
+                <div>
+                    <h4 style="margin: 0 0 5px 0;">Recommended Strategy</h4>
+                    <strong id="strategy-value" style="font-size: 1.1em; color: #0056b3;"></strong>
+                </div>
+                <!-- NEW: Explain Icon -->
+                <svg id="explain-strategy-btn" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="explain-icon" style="display:none;" title="Explain this strategy">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
             </div>
 
             <!-- DCF Input Parameters -->
@@ -260,6 +269,21 @@
         
         <div id="sectors-content" style="display: none; max-height: 450px; overflow-y: auto;">
             <!-- Sector rotation table will be populated here by JS -->
+        </div>
+    </div>
+
+    <!-- NEW: Strategy View -->
+    <div id="strategy-view" style="display:none;">
+        <h2>Investment Strategy Explanation</h2>
+        
+        <p id="nano-status" style="font-size: 0.9em; font-style: italic; padding: 5px; border-radius: 4px;"></p>
+
+        <div id="strategy-loading" style="display:none; color: orange; padding: 10px; text-align: center;">
+            <p>Gemini Nano is generating the explanation...</p>
+        </div>
+        
+        <div id="strategy-content" style="display: none;">
+            <pre id="strategy-explanation-text"></pre>
         </div>
     </div>
 

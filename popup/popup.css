@@ -39,20 +39,22 @@ body {
 /* --- View Navigation --- */
 .view-nav {
     display: flex;
-    justify-content: flex-start;
+    justify-content: flex-start; /* Changed to flex-start */
     margin-bottom: 10px;
     border-bottom: 1px solid #ccc;
 }
 
 .nav-btn {
-    padding: 8px 12px; /* Adjusted padding for 4 tabs */
+    padding: 8px 9px; /* UPDATED: Reduced padding for 5 tabs */
     cursor: pointer;
     background-color: transparent;
     border: none;
-    font-size: 0.9em; /* Slightly smaller font */
+    font-size: 0.85em; /* UPDATED: Slightly smaller font */
     color: #555;
     border-bottom: 3px solid transparent;
     transition: all 0.2s;
+    flex-grow: 1; /* NEW: Allow tabs to share space */
+    text-align: center; /* NEW: Center text */
 }
 
 .nav-btn:hover {
@@ -112,6 +114,19 @@ h2, h3, h4 {
     stroke: #dc3545;
 }
 
+/* --- NEW: Explain Icon Style --- */
+.explain-icon {
+    cursor: pointer;
+    stroke: #007bff;
+    transition: all 0.2s;
+}
+
+.explain-icon:hover {
+    stroke: #0056b3;
+    transform: scale(1.1);
+}
+/* --- End Explain Icon Style --- */
+
 
 #tickerInput {
     width: calc(100% - 22px); /* Adjusted for padding */
@@ -144,7 +159,8 @@ h2, h3, h4 {
     cursor: not-allowed;
 }
 
-#loading {
+#loading,
+#strategy-loading { /* NEW: Added strategy loading */
     padding: 10px;
     text-align: center;
     color: #ffc107; /* Orange/Yellow for attention */
@@ -253,7 +269,9 @@ h2, h3, h4 {
     border-top: 1px solid #eee;
 }
 
-#rationaleSection pre {
+/* UPDATED: Shared style for rationale and strategy explanation */
+#rationaleSection pre,
+#strategy-content pre {
     background-color: #eee;
     padding: 10px;
     border-radius: 4px;
@@ -580,6 +598,20 @@ h2, h3, h4 {
     font-weight: bold;
 }
 /* --- End Sector Rotation Styles --- */
+
+/* --- NEW: Strategy View Styles --- */
+#nano-status.available {
+    color: #28a745; /* Green */
+    background-color: #eaf8ea;
+    border: 1px solid #c3e6cb;
+}
+
+#nano-status.unavailable {
+    color: #dc3545; /* Red */
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+}
+/* --- End Strategy View Styles --- */
 
 
 /* Modal Styles */

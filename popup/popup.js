@@ -17,6 +17,8 @@ const SECTOR_REFRESH_INTERVAL = 24 * 60 * 60 * 1000;
 
 // Stores data for the *currently* analyzed stock
 let currentStockData = null; 
+// NEW: Flag for Gemini Nano availability
+let isNanoAvailable = false;
 
 // --- Notification Bar Logic ---
 function showNotification(message, type = 'info') {
@@ -104,6 +106,36 @@ async function loadApiKeyStatus() {
     }
 }
 
+// --- NEW: Check Gemini Nano Availability ---
+async function checkNanoAvailability() {
+    const nanoStatusEl = document.getElementById('nano-status');
+    if (!nanoStatusEl) return;
+
+    try {
+        if (window.ai && typeof window.ai.createTextSession === 'function') {
+            const availability = await window.ai.canCreateTextSession();
+            if (availability === "readily") {
+                isNanoAvailable = true;
+                nanoStatusEl.textContent = 'Gemini Nano is available and will be used for explanations.';
+                nanoStatusEl.className = 'available';
+            } else {
+                 isNanoAvailable = false;
+                nanoStatusEl.textContent = 'Gemini Nano is available but not ready. Please try again later.';
+                nanoStatusEl.className = 'unavailable';
+            }
+        } else {
+            isNanoAvailable = false;
+            nanoStatusEl.textContent = 'Gemini Nano API (chrome.ai) is not available on this device. Explanations cannot be generated.';
+            nanoStatusEl.className = 'unavailable';
+        }
+    } catch (e) {
+        console.error("Error checking Nano availability:", e);
+        isNanoAvailable = false;
+        nanoStatusEl.textContent = 'Error checking for Gemini Nano. Explanations disabled.';
+        nanoStatusEl.className = 'unavailable';
+    }
+}
+
 
 // --- Core Ticker Analysis Function ---
 function runTickerAnalysis(ticker) {
@@ -123,9 +155,16 @@ function runTickerAnalysis(ticker) {
     document.getElementById('final-results').style.display = 'none';
     document.getElementById('loading').style.display = 'block';
 
-    // NEW: Reset strategy display
+    // NEW: Reset strategy display and explain button
     document.getElementById('strategy-display').style.display = 'none';
     document.getElementById('strategy-value').textContent = '';
+    document.getElementById('explain-strategy-btn').style.display = 'none';
+    
+    // NEW: Clear old strategy explanation
+    document.getElementById('strategy-explanation-text').textContent = '';
+    document.getElementById('strategy-content').style.display = 'none';
+    document.getElementById('strategy-loading').style.display = 'none';
+
     
     chrome.runtime.sendMessage({ action: "runValuation", ticker: ticker }, (response) => {
         document.getElementById('loading').style.display = 'none';
@@ -175,7 +214,9 @@ function populateDcfInputs(data) {
 
     // NEW: Populate Investment Strategy
     document.getElementById('strategy-value').textContent = data.investmentStrategy || 'N/A';
-    document.getElementById('strategy-display').style.display = 'block';
+    document.getElementById('strategy-display').style.display = 'flex'; // Use flex to align icon
+    // NEW: Show explain button
+    document.getElementById('explain-strategy-btn').style.display = 'block';
     
     // --- NEW: Store data for watchlist ---
     currentStockData = {
@@ -371,25 +412,29 @@ function handleNavClick(view) {
     const analysisView = document.getElementById('analysis-view');
     const watchlistView = document.getElementById('watchlist-view');
     const newsView = document.getElementById('news-view');
-    const sectorsView = document.getElementById('sectors-view'); // NEW
+    const sectorsView = document.getElementById('sectors-view');
+    const strategyView = document.getElementById('strategy-view'); // NEW
     
     // Nav buttons
     const navAnalysis = document.getElementById('nav-analysis');
     const navWatchlist = document.getElementById('nav-watchlist');
     const navNews = document.getElementById('nav-news');
-    const navSectors = document.getElementById('nav-sectors'); // NEW
+    const navSectors = document.getElementById('nav-sectors');
+    const navStrategy = document.getElementById('nav-strategy'); // NEW
 
     // Hide all views
     analysisView.style.display = 'none';
     watchlistView.style.display = 'none';
     newsView.style.display = 'none';
-    sectorsView.style.display = 'none'; // NEW
+    sectorsView.style.display = 'none';
+    strategyView.style.display = 'none'; // NEW
     
     // Deactivate all nav buttons
     navAnalysis.classList.remove('active');
     navWatchlist.classList.remove('active');
     navNews.classList.remove('active');
-    navSectors.classList.remove('active'); // NEW
+    navSectors.classList.remove('active');
+    navStrategy.classList.remove('active'); // NEW
 
     if (view === 'watchlist') {
         watchlistView.style.display = 'block';
@@ -416,10 +461,14 @@ function handleNavClick(view) {
         loadAndRefreshNews(activeTimeframe);
         // --- END MODIFIED LOGIC ---
 
-    } else if (view === 'sectors') { // NEW
+    } else if (view === 'sectors') {
         sectorsView.style.display = 'block';
         navSectors.classList.add('active');
         loadSectorRotationData(); // Call new function for loading sector data
+    } else if (view === 'strategy') { // NEW
+        strategyView.style.display = 'block';
+        navStrategy.classList.add('active');
+        // No auto-load, just show the view
     } else { // 'analysis'
         analysisView.style.display = 'block';
         navAnalysis.classList.add('active');
@@ -613,6 +662,96 @@ async function handleFavoriteClick() {
         showNotification('Error updating watchlist.', 'error');
     }
 }
+
+// --- NEW: Strategy Explanation Logic ---
+
+// Gathers all analysis data into a single string
+function getFullAnalysisContext() {
+    let context = "--- CURRENT ANALYSIS CONTEXT ---\n";
+    
+    // 1. Stock Data
+    if (currentStockData) {
+        context += `Ticker: ${currentStockData.ticker}\n`;
+        context += `Current Price: $${currentStockData.currentPrice.toFixed(2)}\n`;
+        context += `Recommended Strategy: ${currentStockData.investmentStrategy}\n`;
+    }
+    
+    // 2. DCF Value
+    const dcfVal = document.getElementById('intrinsicValue').textContent;
+    if (dcfVal) {
+        context += `Calculated Intrinsic Value: ${dcfVal}\n`;
+    }
+
+    // 3. Analyst Targets
+    const analystTargets = document.getElementById('analystEstimateTargets').innerText;
+    if (analystTargets) {
+        context += `\n--- Analyst Consensus ---\n${analystTargets}\n`;
+    }
+
+    // 4. Rationale
+    context += "\n--- AI RATIONALE ---";
+    const rationaleIds = [
+        'rationale-megatrends', 'rationale-swot', 'rationale-strategy',
+        'rationale-ufcf', 'rationale-wacc', 'rationale-netDebt',
+        'rationale-shares', 'rationale-perpGrowth', 'rationale-analystConsensus'
+    ];
+    
+    for (const id of rationaleIds) {
+        try {
+            const el = document.getElementById(id);
+            const label = el.previousElementSibling.textContent; // Get the <h5> label
+            const text = el.textContent;
+            if (text && text !== 'N/A') {
+                context += `\n${label}:\n${text}\n`;
+            }
+        } catch (e) {
+            console.warn("Could not find rationale element:", id);
+        }
+    }
+    
+    context += "\n--- END OF CONTEXT ---";
+    return context;
+}
+
+// Calls Gemini Nano to generate the explanation
+async function generateStrategyExplanation(context) {
+    const prompt = `
+Provide a ticker-specific explanation of the recommended investment strategy and concrete, actionable steps for the user.
+Use the following analysis data as your context.
+Explain the *financials* of the company and *why* they lead to the recommended strategy.
+Then, provide specific steps the user should take.
+
+Context:
+${context}
+`;
+    
+    const loading = document.getElementById('strategy-loading');
+    const content = document.getElementById('strategy-content');
+    const output = document.getElementById('strategy-explanation-text');
+
+    loading.style.display = 'block';
+    content.style.display = 'none';
+    output.textContent = ''; // Clear old content
+
+    try {
+        const session = await window.ai.createTextSession();
+        const result = await session.prompt(prompt);
+        
+        output.textContent = result; // Put generated text in <pre>
+        content.style.display = 'block';
+        
+    } catch (e) {
+        console.error("Error generating strategy explanation:", e);
+        showNotification("Error generating explanation with Gemini Nano.", "error");
+        output.textContent = 'An error occurred during generation.';
+        content.style.display = 'block';
+    } finally {
+        loading.style.display = 'none'; // Hide loader
+    }
+}
+
+// --- END: Strategy Explanation Logic ---
+
 
 // --- NEW: News Tab Logic ---
 
@@ -1025,6 +1164,7 @@ function displaySectorRotation(sectorData) { // This is now an array
 // --- Event Listeners ---
 document.addEventListener('DOMContentLoaded', () => {
     loadApiKeyStatus();
+    checkNanoAvailability(); // NEW: Check for Gemini Nano on load
 
     // --- Modal Logic ---
     const modal = document.getElementById('apiKeyModal');
@@ -1086,10 +1226,30 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('nav-analysis').addEventListener('click', () => handleNavClick('analysis'));
     document.getElementById('nav-watchlist').addEventListener('click', () => handleNavClick('watchlist'));
     document.getElementById('nav-news').addEventListener('click', () => handleNavClick('news')); // Added
-    document.getElementById('nav-sectors').addEventListener('click', () => handleNavClick('sectors')); // NEW
+    document.getElementById('nav-sectors').addEventListener('click', () => handleNavClick('sectors'));
+    document.getElementById('nav-strategy').addEventListener('click', () => handleNavClick('strategy')); // NEW
 
     // --- Heart Icon Listener ---
     document.getElementById('favorite-heart').addEventListener('click', handleFavoriteClick);
+
+    // --- NEW: Explain Strategy Button Listener ---
+    document.getElementById('explain-strategy-btn').addEventListener('click', () => {
+        if (!isNanoAvailable) {
+            showNotification('Gemini Nano is not available on this device.', 'error');
+            return;
+        }
+        if (!currentStockData) {
+            showNotification('Please run an analysis first.', 'warning');
+            return;
+        }
+        
+        // 1. Get context
+        const context = getFullAnalysisContext();
+        // 2. Switch to strategy tab
+        handleNavClick('strategy');
+        // 3. Run generation
+        generateStrategyExplanation(context);
+    });
 
     // --- MODIFIED: News Sub-Nav Listeners ---
     document.querySelectorAll('.sub-nav-btn').forEach(button => {
