@@ -429,11 +429,27 @@ h2, h3, h4 {
     margin-bottom: 8px;
 }
 
-.news-meta .news-source {
-    /* No margin-bottom needed anymore */
+/* MODIFICATION: Base style for source span and source link */
+.news-meta .news-source,
+.news-meta .news-source-link {
     text-align: left;
     flex-basis: 50%;
+    /* Added to prevent long links from breaking layout */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
+
+/* NEW: Style for clickable source link */
+.news-source-link {
+    color: #007bff;
+    text-decoration: none;
+    font-style: italic;
+}
+.news-source-link:hover {
+    text-decoration: underline;
+}
+
 
 .news-meta .news-datetime {
     text-align: right;

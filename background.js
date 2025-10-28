@@ -60,7 +60,10 @@ async function fetchWithRetry(apiKey, endpoint, payload) {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            const response = await fetch(`${endpoint}?key=${apiKey}`, {
+            // FIX: Construct the full URL properly
+            const fullUrl = `${endpoint}?key=${apiKey}`;
+            
+            const response = await fetch(fullUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -75,20 +78,26 @@ async function fetchWithRetry(apiKey, endpoint, payload) {
                 
                 const rawText = data.candidates[0].content.parts[0].text;
                 
-                // --- FIX: Changed regex to be NON-GREEDY (using *?) ---
-                // This finds the *first* JSON object, not the longest match.
-                const jsonMatch = rawText.match(/\{[\s\S]*?\}/); 
-                if (!jsonMatch) {
-                    // Fallback for simple JSON array
-                    // --- FIX: Changed regex to be NON-GREEDY (using *?) ---
-                    // This finds the *first* JSON array, not the longest match.
-                    const jsonArrayMatch = rawText.match(/\[[\s\S]*?\]/);
-                    if (!jsonArrayMatch) {
-                        throw new Error("Could not find a valid JSON object or array in the model's response.");
-                    }
-                    return jsonArrayMatch[0]; // Return the first JSON array string
+                // --- FIX: Improved JSON extraction ---
+                // Try to find a JSON block fenced with ```json
+                let jsonMatch = rawText.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+                
+                if (jsonMatch && jsonMatch[1]) {
+                    // Found fenced JSON
+                    return jsonMatch[1];
                 }
-                return jsonMatch[0]; // Return the first JSON object string
+
+                // Fallback: Try to find the first non-greedy JSON object
+                // This is kept for compatibility
+                jsonMatch = rawText.match(/\{[\s\S]*?\}/); 
+                
+                if (jsonMatch) {
+                    console.warn("Could not find fenced JSON, falling back to first-object match.");
+                    return jsonMatch[0]; // Return the first JSON object string
+                }
+
+                console.error("Could not find JSON object in model response:", rawText);
+                throw new Error("Could not find a valid JSON object in the model's response.");
             }
 
             // --- RETRYABLE SERVER ERROR (like 500, 503, 504, or 429) ---
@@ -112,7 +121,8 @@ async function fetchWithRetry(apiKey, endpoint, payload) {
             // This will catch network errors or the thrown non-retryable error
             lastError = error; // Store this error
             
-            if (error.message.startsWith('API Error')) {
+            // Check for the specific URL parsing error as well
+            if (error.message.startsWith('API Error') || error.message.includes('Failed to parse URL')) {
                  // This was a non-retryable error, so we break the loop
                  console.error(`Non-retryable error encountered: ${error.message}`);
                  break; 
@@ -146,9 +156,11 @@ All monetary values should be in Millions of USD.
 All ratios/rates (cost of equity, cost of debt, tax rate, growth rates) should be in decimal format (e.g., 8.5% = 0.085).
 Shares outstanding should be in Millions.
 
-Your entire response MUST be a single, validated JSON object. Do not include any text, markdown, or commentary before or after the JSON object.
+Your entire response MUST be a single, validated JSON object, enclosed in triple backticks (\\\`\`\`json ... \\\`\`\`).
+Do not include any text, markdown, or commentary before or after the JSON block.
 
 The JSON object must follow this exact structure:
+\\\`\`\`json
 {
   "ticker": "${ticker}",
   "latestPrice": 0.0,
@@ -185,6 +197,7 @@ The JSON object must follow this exact structure:
     "swotAnalysis": "Brief rationale for the stock's fundamental Strengths, Weaknesses, Opportunities, and Threats (SWOT)."
   }
 }
+\\\`\`\`
 
 To populate the values, follow this methodology:
 1.  Fetch the "latestPrice" and "priceDate".
@@ -209,7 +222,7 @@ To populate the values, follow this methodology:
     * **NEW**: Also populate "swotAnalysis" with a brief fundamental SWOT.
 `;
 
-    // UPDATED Endpoint
+    // FIX: Removed Markdown formatting from the URL string.
     const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
     
     const payload = {
@@ -217,7 +230,7 @@ To populate the values, follow this methodology:
         tools: [{ "google_search": {} }],
         generationConfig: {
             temperature: 0.1
-            // REMOVED: responseMimeType: "application/json", 
+            // REMOVED: responseMimeType: "application/json" // This caused the 400 error with tools
         }
     };
 
@@ -262,17 +275,21 @@ For each news item, provide:
 2.  The source (e.g., Bloomberg, Reuters).
 3.  The publication date and time as a string (e.g., "October 26, 2025, 10:30 AM" or "2025-10-26T10:30:00Z"). Provide the most precise timestamp you can find.
 4.  A maximum of 3 key specific stocks (with tickers) that are most affected.
+5.  The direct URL to the source article.
 
-Your entire response MUST be a single, validated JSON object. Do not include any text, markdown, or commentary before or after the JSON object.
+Your entire response MUST be a single, validated JSON object, enclosed in triple backticks (\\\`\`\`json ... \\\`\`\`).
+Do not include any text, markdown, or commentary before or after the JSON block.
 
 The JSON object must follow this exact structure:
+\\\`\`\`json
 {
-  "newsItems": [
+    "newsItems": [
     {
       "headline": "Example: Fed Hints at Earlier-Than-Expected Rate Cuts",
       "summary": "Summary of the news item, explaining what happened and why it matters.",
       "source": "Reputable news source (e.g., Bloomberg, Reuters, WSJ)",
       "datetime": "October 26, 2025, 10:30 AM",
+      "sourceUrl": "https://www.bloomberg.com/example-article-path",
       "affectedAssets": [
         { "name": "US Technology Sector", "ticker": null },
         { "name": "Gold", "ticker": "GLD" },
@@ -281,18 +298,24 @@ The JSON object must follow this exact structure:
     }
   ]
 }
+\\\`\`\`
+
+To populate this JSON:
+- For "affectedAssets", if you find more than one, ensure they are in a JSON array, with each object separated by a comma.
+- Ensure all strings are properly escaped.
 `;
     // --- END UPDATED PROMPT ---
 
-    // UPDATED Endpoint
+    // FIX: Removed Markdown formatting from the URL string.
     const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
     
     const payload = {
+        // FIX: Changed userPrompt to newsPrompt
         contents: [{ parts: [{ text: newsPrompt }] }],
         tools: [{ "google_search": {} }],
         generationConfig: {
             temperature: 0.2
-            // REMOVED: responseMimeType: "application/json",
+            // REMOVED: responseMimeType: "application/json" // This caused the 400 error with tools
         }
     };
 
@@ -306,14 +329,20 @@ The JSON object must follow this exact structure:
         }
         
         // Optional: Validate first item for new field
-        if (result.newsItems.length > 0 && typeof result.newsItems[0].datetime !== 'string') {
-            console.warn("Gemini response news item is missing 'datetime' string field.");
-            // Don't throw an error, just warn, in case model fails
+        if (result.newsItems.length > 0) {
+            if (typeof result.newsItems[0].datetime !== 'string') {
+                console.warn("Gemini response news item is missing 'datetime' string field.");
+                // Don't throw an error, just warn, in case model fails
+            }
+            // MODIFICATION: Check for sourceUrl
+            if (typeof result.newsItems[0].sourceUrl !== 'string') {
+                console.warn("Gemini response news item is missing 'sourceUrl' string field.");
+            }
         }
         
         return result; // Success
 
-    } catch (error) {
+    } catch (error) { // FIX: Removed the stray 'Copy' identifier here
         console.error(`Global news fetch failed:`, error);
         return { error: `Failed to get news. ${error.message}` };
     }
@@ -337,51 +366,56 @@ You must use your search tools to find the requested price data.
 
 Calculate the 7-Day and 55-Day growth percentages based on these prices.
 
-Your entire response MUST be a single, validated JSON array. Do not include any text, markdown, or commentary before or after the JSON.
+Your entire response MUST be a single, validated JSON object. Do not include any text, markdown, or commentary before or after the JSON.
 
-The JSON array must contain exactly 11 objects, one for each symbol. Each object must follow this exact structure:
+The JSON object must follow this exact structure:
 {
-  "symbol": "XLK",
-  "name": "Technology Select Sector SPDR Fund",
-  "price_55_days_ago": 0.0,
-  "price_7_days_ago": 0.0,
-  "current_price": 0.0,
-  "growth_7_day_pct": 0.0,
-  "growth_55_day_pct": 0.0
+  "sectorData": [
+    {
+      "symbol": "XLK",
+      "name": "Technology Select Sector SPDR Fund",
+      "price_55_days_ago": 0.0,
+      "price_7_days_ago": 0.0,
+      "current_price": 0.0,
+      "growth_7_day_pct": 0.0,
+      "growth_55_day_pct": 0.0
+    }
+  ]
 }
 
-Populate this structure for all 11 symbols. The 'name' field must be the full name of the ETF. 'growth_7_day_pct' and 'growth_55_day_pct' should be in decimal format (e.g., 5.5% = 0.055).
+Populate the "sectorData" array with exactly 11 objects, one for each symbol listed above. The 'name' field must be the full name of the ETF. 'growth_7_day_pct' and 'growth_55_day_pct' should be in decimal format (e.g., 5.5% = 0.055).
 `;
 
-    // UPDATED Endpoint
+    // FIX: Removed Markdown formatting from the URL string.
     const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
     
     const payload = {
+        // FIX: Changed userPrompt to sectorPrompt
         contents: [{ parts: [{ text: sectorPrompt }] }],
         tools: [{ "google_search": {} }],
         generationConfig: {
             temperature: 0.1
+            // NOTE: No JSON mime type here, as the handler for this
+            // in popup.js (displaySectorRotation) is designed
+            // to display the raw string. This is correct.
         }
     };
 
     try {
         const rawJsonString = await fetchWithRetry(apiKey, GEMINI_CLOUD_ENDPOINT, payload);
-        const sectorData = JSON.parse(rawJsonString); // This should be an array
-
-        // Validate the structure
-        if (!Array.isArray(sectorData)) {
-             throw new Error("The parsed JSON is not an array as expected.");
-        }
-
-        if (sectorData.length === 0 || typeof sectorData[0].current_price !== 'number' || typeof sectorData[0].growth_7_day_pct !== 'number') {
-            throw new Error("The parsed JSON array does not match the expected sector data structure.");
-        }
         
-        // Wrap in an object for consistent response handling in popup.js
-        return { sectorData: sectorData }; 
+        // --- START MODIFICATION ---
+        // User requested to display raw data, so we don't parse it here.
+        // We just return the raw JSON string.
+        
+        // Return the raw string, but keep the object structure for popup.js
+        return { sectorData: rawJsonString };
+        // --- END MODIFICATION ---
 
     } catch (error) {
         console.error(`Sector rotation fetch failed:`, error);
         return { error: `Failed to get sector data. ${error.message}` };
     }
 }
+
+

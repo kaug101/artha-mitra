@@ -759,15 +759,27 @@ function displayNews(newsItems) {
                 formattedDate = item.datetime; // Fallback to raw string
             }
         }
+
+        // 3. MODIFICATION: Create Source Link
+        let sourceElement = `<span class="news-source">Source: ${item.source || 'Unknown'}</span>`;
+        if (item.sourceUrl && (item.sourceUrl.startsWith('http://') || item.sourceUrl.startsWith('https://'))) {
+             // Use target="_blank" to open in a new tab
+             // Use rel="noopener noreferrer" for security
+            sourceElement = `
+                <a href="${item.sourceUrl}" target="_blank" rel="noopener noreferrer" class="news-source-link">
+                    Source: ${item.source || 'Unknown'}
+                </a>
+            `;
+        }
         
-        // 3. Create HTML
+        // 4. Create HTML
         content.innerHTML += `
             <div class="news-item-card">
                 <h5>${item.headline || 'No Headline'}</h5>
                 
                 <!-- NEW: Source and Date/Time row -->
                 <div class="news-meta">
-                    <span class="news-source">Source: ${item.source || 'Unknown'}</span>
+                    ${sourceElement}
                     <span class="news-datetime">${formattedDate}</span>
                 </div>
                 
@@ -869,52 +881,55 @@ async function loadSectorRotationData() {
     }
 }
 
-function displaySectorRotation(sectorData) {
+function displaySectorRotation(sectorDataString) { // Renamed param for clarity
     const content = document.getElementById('sectors-content');
     
-    // Sort by 55-Day Growth % (descending)
+    // --- START MODIFICATION ---
+    // User requested to display raw data. sectorDataString is the raw JSON string.
+    
+    if (typeof sectorDataString !== 'string' || sectorDataString.trim() === '') {
+        content.innerHTML = '<p>No sector data was returned.</p>';
+        return;
+    }
+
+    // Try to parse and re-stringify for nice formatting (pretty-print)
+    let formattedDisplay = '';
     try {
-        sectorData.sort((a, b) => b.growth_55_day_pct - a.growth_55_day_pct);
+        const parsedJson = JSON.parse(sectorDataString);
+        // Stringify with 2-space indentation
+        formattedDisplay = JSON.stringify(parsedJson, null, 2); 
+        // Now, escape this formatted string for safe HTML injection
+        formattedDisplay = formattedDisplay
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
     } catch (e) {
-        console.error("Could not sort sector data:", e);
-        // Continue with unsorted data
+        // If it fails to parse (e.g., it's not JSON), display the raw string.
+        console.warn("Sector data was not valid JSON, displaying as raw text.", e);
+        // Escape HTML to prevent XSS if the string contains < or >
+        formattedDisplay = sectorDataString
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
     }
 
-    let tableHtml = `
-        <table class="sectors-table">
-            <thead>
-                <tr>
-                    <th>Symbol</th>
-                    <th>Current Price</th>
-                    <th>7-Day %</th>
-                    <th>55-Day %</th>
-                </tr>
-            </thead>
-            <tbody>
+    // Use <pre> tag to respect formatting and newlines
+    // Add some styling to match the <pre> in the rationale section
+    content.innerHTML = `
+        <pre style="
+            background-color: #eee;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap; /* Ensures text wraps */
+            word-wrap: break-word; /* Break long words */
+            font-size: 0.85em;
+            border-left: 3px solid #007bff;
+            margin-top: 5px;
+        ">
+${formattedDisplay}
+        </pre>
     `;
-
-    for (const item of sectorData) {
-        const g7_pct = (item.growth_7_day_pct * 100).toFixed(1);
-        const g55_pct = (item.growth_55_day_pct * 100).toFixed(1);
-
-        const g7_class = item.growth_7_day_pct >= 0 ? 'sector-growth-positive' : 'sector-growth-negative';
-        const g55_class = item.growth_55_day_pct >= 0 ? 'sector-growth-positive' : 'sector-growth-negative';
-        
-        tableHtml += `
-            <tr>
-                <td>
-                    <b>${item.symbol}</b>
-                    <span class="sector-name">${item.name}</span>
-                </td>
-                <td>$${item.current_price.toFixed(2)}</td>
-                <td><b class="${g7_class}">${g7_pct}%</b></td>
-                <td><b class="${g55_class}">${g55_pct}%</b></td>
-            </tr>
-        `;
-    }
-
-    tableHtml += '</tbody></table>';
-    content.innerHTML = tableHtml;
+    // --- END MODIFICATION ---
 }
 
 
