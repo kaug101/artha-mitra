@@ -110,29 +110,42 @@ async function loadApiKeyStatus() {
 async function checkNanoAvailability() {
     const nanoStatusEl = document.getElementById('nano-status');
     if (!nanoStatusEl) return;
+    const explainButton = document.getElementById('explain-strategy-btn');
 
     try {
-        if (window.ai && typeof window.ai.createTextSession === 'function') {
+        // Check for the chrome.ai API
+        if (window.ai && typeof window.ai.canCreateTextSession === 'function') {
             const availability = await window.ai.canCreateTextSession();
+            
             if (availability === "readily") {
                 isNanoAvailable = true;
-                nanoStatusEl.textContent = 'Gemini Nano is available and will be used for explanations.';
+                nanoStatusEl.textContent = 'Gemini Nano is available for instant explanations.';
                 nanoStatusEl.className = 'available';
-            } else {
+                if (explainButton) explainButton.style.display = 'block'; // Ensure button is visible
+            } else if (availability === "after-download") {
+                isNanoAvailable = false; // Treat as unavailable until downloaded
+                nanoStatusEl.textContent = 'Gemini Nano is downloading... Cloud fallback will be used.';
+                nanoStatusEl.className = 'unavailable'; // Use 'unavailable' style
+                if (explainButton) explainButton.style.display = 'block'; // Show button, will use cloud
+            } else { // "no" or other states
                  isNanoAvailable = false;
-                nanoStatusEl.textContent = 'Gemini Nano is available but not ready. Please try again later.';
+                nanoStatusEl.textContent = 'Gemini Nano not supported. Cloud fallback will be used.';
                 nanoStatusEl.className = 'unavailable';
+                if (explainButton) explainButton.style.display = 'block'; // Show button, will use cloud
             }
         } else {
+            // chrome.ai API is not present at all
             isNanoAvailable = false;
-            nanoStatusEl.textContent = 'Gemini Nano API (chrome.ai) is not available on this device. Explanations cannot be generated.';
+            nanoStatusEl.textContent = 'Gemini Nano API not found. Cloud fallback will be used.';
             nanoStatusEl.className = 'unavailable';
+            if (explainButton) explainButton.style.display = 'block'; // Show button, will use cloud
         }
     } catch (e) {
         console.error("Error checking Nano availability:", e);
         isNanoAvailable = false;
-        nanoStatusEl.textContent = 'Error checking for Gemini Nano. Explanations disabled.';
+        nanoStatusEl.textContent = 'Error checking Nano. Cloud fallback will be used.';
         nanoStatusEl.className = 'unavailable';
+        if (explainButton) explainButton.style.display = 'block'; // Show button, will use cloud
     }
 }
 
@@ -157,6 +170,9 @@ function runTickerAnalysis(ticker) {
             session.destroy(); 
         }).catch(err => {
             console.warn("Nano background warm-up failed:", err);
+            // If warm-up fails, our flag will handle the fallback
+            isNanoAvailable = false; 
+            checkNanoAvailability(); // Re-run check to update UI
         });
     }
     // --- END NEW ---
@@ -175,7 +191,8 @@ function runTickerAnalysis(ticker) {
     // NEW: Reset strategy display and explain button
     document.getElementById('strategy-display').style.display = 'none';
     document.getElementById('strategy-value').textContent = '';
-    document.getElementById('explain-strategy-btn').style.display = 'none';
+    // We no longer hide the button, checkNanoAvailability handles it
+    // document.getElementById('explain-strategy-btn').style.display = 'none';
     
     // NEW: Clear old strategy explanation
     document.getElementById('strategy-explanation-text').textContent = '';
@@ -232,8 +249,6 @@ function populateDcfInputs(data) {
     // NEW: Populate Investment Strategy
     document.getElementById('strategy-value').textContent = data.investmentStrategy || 'N/A';
     document.getElementById('strategy-display').style.display = 'flex'; // Use flex to align icon
-    // NEW: Show explain button
-    document.getElementById('explain-strategy-btn').style.display = 'block';
     
     // --- NEW: Store data for watchlist ---
     currentStockData = {
@@ -269,6 +284,9 @@ function populateDcfInputs(data) {
     document.getElementById('input-netDebt').value = params.netDebt.toFixed(2);
     document.getElementById('input-shares').value = params.sharesOutstanding.toFixed(2);
     document.getElementById('input-perpGrowth').value = params.perpetualGrowthRate.toFixed(4);
+
+    // Re-check Nano availability, which will now show the explain button
+    checkNanoAvailability();
 }
 
 // --- Local DCF Calculation ---
@@ -731,12 +749,13 @@ function getFullAnalysisContext() {
 }
 
 // Calls Gemini Nano to generate the explanation
-async function generateStrategyExplanation(context) {
+async function generateStrategyExplanationNano(context) {
     const prompt = `
 Provide a ticker-specific explanation of the recommended investment strategy and concrete, actionable steps for the user.
 Use the following analysis data as your context.
 Explain the *financials* of the company and *why* they lead to the recommended strategy.
 Then, provide specific steps the user should take.
+Your response should be formatted as plain text, not markdown.
 
 Context:
 ${context}
@@ -746,6 +765,7 @@ ${context}
     const content = document.getElementById('strategy-content');
     const output = document.getElementById('strategy-explanation-text');
 
+    loading.textContent = "Gemini Nano is generating the explanation..."; // Specific message
     loading.style.display = 'block';
     content.style.display = 'none';
     output.textContent = ''; // Clear old content
@@ -761,9 +781,9 @@ ${context}
         content.style.display = 'block';
         
     } catch (e) {
-        console.error("Error generating strategy explanation:", e);
+        console.error("Error generating strategy explanation (Nano):", e);
         showNotification("Error generating explanation with Gemini Nano.", "error");
-        output.textContent = 'An error occurred during generation.';
+        output.textContent = 'An error occurred during Nano generation.';
         content.style.display = 'block';
     } finally {
         loading.style.display = 'none'; // Hide loader
@@ -772,6 +792,46 @@ ${context}
         }
     }
 }
+
+// --- NEW: Calls Gemini Cloud (via background.js) for explanation ---
+async function generateStrategyExplanationCloud(context) {
+    const loading = document.getElementById('strategy-loading');
+    const content = document.getElementById('strategy-content');
+    const output = document.getElementById('strategy-explanation-text');
+
+    loading.textContent = "Gemini Cloud is generating the explanation..."; // Specific message
+    loading.style.display = 'block';
+    content.style.display = 'none';
+    output.textContent = ''; // Clear old content
+
+    // Send context to background script to run cloud explanation
+    chrome.runtime.sendMessage({ action: "getStrategyExplanationCloud", context: context }, (response) => {
+        loading.style.display = 'none'; // Hide loader
+
+        if (chrome.runtime.lastError) {
+            console.error("Error from background (Cloud Strategy):", chrome.runtime.lastError.message);
+            showNotification("An error occurred. Check the service worker console.", "error");
+            output.textContent = 'An error occurred during Cloud generation.';
+            content.style.display = 'block';
+            return;
+        }
+        
+        if (response && response.error) {
+             showNotification(`Cloud Error: ${response.error}`, 'error');
+             output.textContent = `An error occurred: ${response.error}`;
+             content.style.display = 'block';
+        } else if (response && response.explanation) {
+            output.textContent = response.explanation; // Put generated text in <pre>
+            content.style.display = 'block';
+            showNotification('Cloud explanation loaded.', 'success');
+        } else {
+            showNotification('Received an empty response from the cloud.', 'error');
+            output.textContent = 'Received an empty response from the cloud.';
+            content.style.display = 'block';
+        }
+    });
+}
+
 
 // --- END: Strategy Explanation Logic ---
 
@@ -1257,10 +1317,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- NEW: Explain Strategy Button Listener ---
     document.getElementById('explain-strategy-btn').addEventListener('click', () => {
-        if (!isNanoAvailable) {
-            showNotification('Gemini Nano is not available on this device.', 'error');
-            return;
-        }
         if (!currentStockData) {
             showNotification('Please run an analysis first.', 'warning');
             return;
@@ -1270,8 +1326,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const context = getFullAnalysisContext();
         // 2. Switch to strategy tab
         handleNavClick('strategy');
-        // 3. Run generation
-        generateStrategyExplanation(context);
+
+        // 3. Run generation based on availability
+        if (isNanoAvailable) {
+            console.log("Using Gemini Nano for explanation.");
+            generateStrategyExplanationNano(context);
+        } else {
+            console.log("Using Gemini Cloud for explanation.");
+            generateStrategyExplanationCloud(context);
+        }
     });
 
     // --- MODIFIED: News Sub-Nav Listeners ---

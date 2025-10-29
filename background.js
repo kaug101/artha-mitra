@@ -41,6 +41,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         handleSectorRotationAlphaVantage().then(sendResponse);
         return true; // Keep message channel open for async response
     }
+
+    // --- NEW: Handler for Cloud Strategy Explanation ---
+    if (request.action === "getStrategyExplanationCloud") {
+        handleStrategyExplanationCloud(request.context).then(sendResponse);
+        return true; // Keep message channel open for async response
+    }
+    // --- End NEW ---
+
     return true;
 });
 
@@ -59,7 +67,8 @@ async function getAlphaVantageApiKey() {
 }
 
 // Re-usable retry logic for Gemini API calls
-async function fetchWithRetry(apiKey, endpoint, payload) {
+// UPDATED: This function can now return raw text OR JSON
+async function fetchWithRetry(apiKey, endpoint, payload, expectJson = true) {
     const maxRetries = 3;
     let delay = 2000; // 2 seconds
     let lastError = null; // Store the last error encountered
@@ -84,6 +93,11 @@ async function fetchWithRetry(apiKey, endpoint, payload) {
                 
                 const rawText = data.candidates[0].content.parts[0].text;
                 
+                // If we don't expect JSON, just return the raw text
+                if (!expectJson) {
+                    return rawText;
+                }
+
                 // --- FIX: Improved JSON extraction ---
                 // Try to find a JSON block fenced with ```json
                 let jsonMatch = rawText.match(/```json\s*(\{[\s\S]*?\})\s*```/);
@@ -231,7 +245,7 @@ To populate the values, follow this methodology:
     * **NEW**: Also populate "swotAnalysis" with a brief fundamental SWOT.
 `;
 
-    // SYNTAX FIX: Removed markdown link from URL string
+    
     const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent";
     
     const payload = {
@@ -243,7 +257,8 @@ To populate the values, follow this methodology:
     };
 
     try {
-        const rawJsonString = await fetchWithRetry(apiKey, GEMINI_CLOUD_ENDPOINT, payload);
+        // We expect JSON from this call
+        const rawJsonString = await fetchWithRetry(apiKey, GEMINI_CLOUD_ENDPOINT, payload, true);
         const result = JSON.parse(rawJsonString);
 
         // VALIDATION UPDATE: Check for new investmentStrategy field
@@ -314,8 +329,8 @@ To populate this JSON:
 - Ensure all strings are properly escaped.
 `;
 
-    // SYNTAX FIX: Removed markdown link from URL string
-    const GEMINI_CLOUD_ENDPOINT = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent)";
+    // --- FIX: Removed markdown link syntax from URL string ---
+    const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent";
     
     const payload = {
         contents: [{ parts: [{ text: newsPrompt }] }],
@@ -326,7 +341,8 @@ To populate this JSON:
     };
 
     try {
-        const rawJsonString = await fetchWithRetry(apiKey, GEMINI_CLOUD_ENDPOINT, payload);
+        // We expect JSON from this call
+        const rawJsonString = await fetchWithRetry(apiKey, GEMINI_CLOUD_ENDPOINT, payload, true);
         const result = JSON.parse(rawJsonString);
 
         // Validate the structure
@@ -335,6 +351,7 @@ To populate this JSON:
         }
         
         if (result.newsItems.length > 0) {
+            // Also fix the example URL in the prompt to ensure the model doesn't copy the bad format
             if (typeof result.newsItems[0].datetime !== 'string') {
                 console.warn("Gemini response news item is missing 'datetime' string field.");
             }
@@ -351,7 +368,54 @@ To populate this JSON:
     }
 }
 
-// --- NEW: 5. Alpha Vantage-Powered Sector Rotation Fetch ---
+// --- NEW: 5. Gemini-Powered Cloud Strategy Explanation ---
+async function handleStrategyExplanationCloud(context) {
+    const apiKey = await getGeminiApiKey();
+    if (!apiKey) {
+        return { error: "Gemini API Key not found. Please add it via the cloud icon in the popup." };
+    }
+
+    // This prompt is identical to the Nano prompt, asking for a plain text response
+    const strategyPrompt = `
+Provide a ticker-specific explanation of the recommended investment strategy and concrete, actionable steps for the user.
+Use the following analysis data as your context.
+Explain the *financials* of the company and *why* they lead to the recommended strategy.
+Then, provide specific steps the user should take.
+Your response should be formatted as plain text, not markdown. Do not include any JSON.
+
+Context:
+${context}
+`;
+
+    // --- FIX: Removed markdown link syntax from URL string ---
+    const GEMINI_CLOUD_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent";
+    
+    const payload = {
+        contents: [{ parts: [{ text: strategyPrompt }] }],
+        // No search tools needed, context is provided
+        generationConfig: {
+            temperature: 0.3
+        }
+    };
+
+    try {
+        // We expect raw text, so expectJson = false
+        const explanationText = await fetchWithRetry(apiKey, GEMINI_CLOUD_ENDPOINT, payload, false);
+        
+        if (!explanationText || explanationText.trim() === "") {
+             throw new Error("Received an empty explanation from the model.");
+        }
+        
+        return { explanation: explanationText }; // Success
+
+    } catch (error) { 
+        console.error(`Cloud strategy explanation failed:`, error);
+        return { error: `Failed to get cloud explanation. ${error.message}` };
+    }
+}
+
+
+// --- 6. Alpha Vantage-Powered Sector Rotation Fetch ---
 
 const ETF_NAMES = {
     "XLK": "Technology Select Sector SPDR Fund",
@@ -522,3 +586,4 @@ async function handleSectorRotationAlphaVantage() {
     // Return the data, even if it's partial
     return { sectorData: sectorData };
 }
+
